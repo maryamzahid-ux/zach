@@ -1,0 +1,1300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Sourcemark — fund reporting, traced to the source</title>
+<meta name="description" content="Upload private equity fund reports, extract the figures that matter with their source page, review and export to Excel.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --paper:#F3F5F2; --surface:#FFFFFF; --surface-2:#F8FAF8; --ink:#13201C; --ink-2:#34433E; --muted:#66756F; --line:#D6DDD8; --line-2:#E6EBE8;
+  --brand:#17533F; --brand-hover:#11463A; --on-brand:#FFFFFF; --brand-soft:#DDEBE3; --brand-ink:#17533F;
+  --mark:#F3C93F; --mark-soft:#FBF0C6; --mark-ink:#5E4800;
+  --warn:#8C5C05; --warn-soft:#F8EBCB; --bad:#A3392A; --bad-soft:#F7E1DC; --ok:#17533F; --ok-soft:#DDEBE3;
+  --hl:rgba(243,201,63,.45); --hl-line:#D9A800; --focus:#2E75D6; --shadow:0 1px 2px rgba(19,32,28,.06),0 4px 16px rgba(19,32,28,.06);
+  --r1:6px; --r2:10px; --r3:16px;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --paper:#0F1513; --surface:#161E1B; --surface-2:#1B2522; --ink:#E6ECE9; --ink-2:#C2CDC8; --muted:#93A29C; --line:#2C3833; --line-2:#232E2A;
+    --brand:#5DBB96; --brand-hover:#71C9A6; --on-brand:#0B1411; --brand-soft:#1F3a2F; --brand-ink:#7FD1AF;
+    --mark:#E8BF3C; --mark-soft:#3A3115; --mark-ink:#F3D77A;
+    --warn:#E6B65A; --warn-soft:#3A2F16; --bad:#F09382; --bad-soft:#3D231E; --ok:#7FD1AF; --ok-soft:#1C3329;
+    --hl:rgba(232,191,60,.38); --hl-line:#E8BF3C; --focus:#7DB2F2; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --paper:#0F1513; --surface:#161E1B; --surface-2:#1B2522; --ink:#E6ECE9; --ink-2:#C2CDC8; --muted:#93A29C; --line:#2C3833; --line-2:#232E2A;
+  --brand:#5DBB96; --brand-hover:#71C9A6; --on-brand:#0B1411; --brand-soft:#1F3a2F; --brand-ink:#7FD1AF;
+  --mark:#E8BF3C; --mark-soft:#3A3115; --mark-ink:#F3D77A;
+  --warn:#E6B65A; --warn-soft:#3A2F16; --bad:#F09382; --bad-soft:#3D231E; --ok:#7FD1AF; --ok-soft:#1C3329;
+  --hl:rgba(232,191,60,.38); --hl-line:#E8BF3C; --focus:#7DB2F2; --shadow:0 1px 2px rgba(0,0,0,.3),0 6px 20px rgba(0,0,0,.25);
+  color-scheme:dark;
+}
+:root{box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:calc(env(safe-area-inset-top,0px) + 72px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--paper);color:var(--ink);font:15px/1.55 "Hanken Grotesk",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;font-variant-numeric:tabular-nums;-webkit-font-smoothing:antialiased}
+body::before{content:"";position:fixed;inset:0 0 auto;height:env(safe-area-inset-top,0px);z-index:60;background:var(--surface)}
+button,input,select{font:inherit;color:inherit}
+a{color:var(--brand-ink)}
+:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}
+h1,h2,h3,h4{margin:0;line-height:1.15;letter-spacing:-.015em}
+p{margin:0}
+[hidden]{display:none!important}
+.view{display:none}
+.view.on{display:block}
+.sr{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0)}
+svg.i{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.8;stroke-linecap:round;stroke-linejoin:round}
+
+/* buttons */
+.btn{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:8px 14px;cursor:pointer;font-weight:600;font-size:14px;white-space:nowrap;text-decoration:none;color:var(--ink);transition:background .15s,border-color .15s}
+.btn:hover{border-color:var(--muted)}
+.btn.primary{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.btn.primary:hover{background:var(--brand-hover);border-color:var(--brand-hover)}
+.btn.ghost{border-color:transparent;background:transparent}
+.btn.ghost:hover{background:var(--surface-2)}
+.btn.lg{padding:12px 20px;font-size:15.5px;border-radius:10px}
+.btn.sm{padding:4px 10px;font-size:13px;border-radius:6px}
+.btn.icon{padding:6px}
+.btn[disabled]{opacity:.45;cursor:not-allowed}
+.btn.block{width:100%}
+
+.logo{display:inline-flex;align-items:center;gap:9px;font-weight:700;font-size:17px;letter-spacing:-.02em;color:var(--ink);text-decoration:none}
+.logo-mark{width:26px;height:26px;border-radius:7px;background:var(--brand);position:relative;overflow:hidden;flex:none}
+.logo-mark::before{content:"";position:absolute;left:5px;right:5px;top:7px;height:2px;background:var(--on-brand);opacity:.55;box-shadow:0 5px 0 var(--on-brand),0 10px 0 var(--on-brand)}
+.logo-mark::after{content:"";position:absolute;left:4px;width:13px;top:10px;height:6px;background:var(--mark);border-radius:2px;mix-blend-mode:normal;opacity:.95}
+
+/* ============ LANDING ============ */
+.lnav{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:color-mix(in srgb,var(--paper) 86%,transparent);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border-bottom:1px solid transparent;transition:border-color .2s}
+.lnav.scrolled{border-bottom-color:var(--line)}
+.lnav .in{max-width:1180px;margin:0 auto;display:flex;align-items:center;gap:28px;padding:14px 24px}
+.lnav nav{display:flex;gap:22px;margin-left:12px}
+.lnav nav button{background:none;border:0;padding:4px 0;cursor:pointer;color:var(--ink-2);font-weight:500;font-size:14.5px}
+.lnav nav button:hover{color:var(--ink)}
+.lnav .right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.wrapx{max-width:1180px;margin:0 auto;padding:0 24px}
+.hero{display:grid;grid-template-columns:minmax(0,1.02fr) minmax(0,1fr);gap:56px;align-items:center;padding-top:72px;padding-bottom:88px}
+.hero h1{font-size:clamp(40px,5.4vw,66px);font-weight:700;letter-spacing:-.035em;line-height:1.02;max-width:12ch}
+.hero .lede{margin-top:22px;font-size:18.5px;line-height:1.55;color:var(--ink-2);max-width:46ch}
+.hero .ctas{margin-top:32px;display:flex;gap:12px;flex-wrap:wrap}
+.hero .fine{margin-top:18px;font-size:13.5px;color:var(--muted)}
+/* hero demo */
+.demo{position:relative;min-height:540px}
+.mock-page{position:relative;background:#FFFFFF;color:#1d2522;border-radius:6px;box-shadow:0 24px 60px rgba(19,32,28,.16),0 2px 6px rgba(19,32,28,.08);padding:26px 26px 22px;width:84%;transform:rotate(-1.4deg);font-size:12.5px}
+.mock-page .t1{font-weight:700;font-size:14px}
+.mock-page .t2{color:#5b6863;margin-top:2px}
+.mock-page table{width:100%;border-collapse:collapse;margin-top:16px}
+.mock-page th{text-align:left;font-weight:700;border-bottom:1px solid #222;padding:5px 0;font-size:12px}
+.mock-page td{padding:6px 0;border-bottom:1px solid #e3e6e4}
+.mock-page td:last-child,.mock-page th:last-child{text-align:right}
+.mock-page .pg{position:absolute;right:20px;bottom:10px;color:#8a948f;font-size:11px}
+.mock-page .filler{height:7px;background:#eceeed;border-radius:3px;margin-top:9px}
+.mark{background:linear-gradient(transparent 12%,var(--hl) 12%,var(--hl) 92%,transparent 92%) no-repeat 0 0/0% 100%;padding:0 3px;border-radius:2px;animation:sweep .7s cubic-bezier(.5,0,.2,1) 2.15s forwards}
+@keyframes sweep{to{background-size:100% 100%}}
+.mock-x{position:absolute;right:0;bottom:0;width:72%;background:var(--surface);border:1px solid var(--line);border-radius:var(--r3);box-shadow:var(--shadow);padding:16px 16px 10px;font-size:13px}
+.mock-x .hd{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.mock-x .hd b{font-size:13.5px}
+.mx-row{display:grid;grid-template-columns:1fr auto auto;gap:10px;align-items:center;padding:8px 6px;border-top:1px solid var(--line-2);opacity:0;transform:translateY(4px);animation:rowin .4s ease forwards}
+.mx-row .v{font-weight:600}
+.mx-row.on{background:var(--mark-soft);border-radius:6px;border-top-color:transparent}
+.mx-row:nth-child(2){animation-delay:.5s}.mx-row:nth-child(3){animation-delay:.8s}.mx-row:nth-child(4){animation-delay:1.1s}.mx-row:nth-child(5){animation-delay:1.5s}.mx-row:nth-child(6){animation-delay:2.6s}
+@keyframes rowin{to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: reduce){.mx-row{animation:none;opacity:1;transform:none}.mark{animation:none;background-size:100% 100%}}
+
+.chip{display:inline-flex;align-items:center;gap:4px;border-radius:999px;padding:1px 9px;font-size:12px;font-weight:600;white-space:nowrap;line-height:1.7}
+.chip.ok{background:var(--ok-soft);color:var(--ok)}
+.chip.warn{background:var(--warn-soft);color:var(--warn)}
+.chip.bad{background:var(--bad-soft);color:var(--bad)}
+.chip.mute{background:var(--surface-2);color:var(--muted);box-shadow:inset 0 0 0 1px var(--line-2)}
+.chip.brand{background:var(--brand-soft);color:var(--brand-ink)}
+.chip.markc{background:var(--mark-soft);color:var(--mark-ink)}
+
+.band{padding:96px 0;border-top:1px solid var(--line)}
+.band.alt{background:var(--surface)}
+.sec-h{max-width:30ch;font-size:clamp(28px,3.4vw,40px);font-weight:700;letter-spacing:-.028em}
+.sec-p{margin-top:14px;color:var(--ink-2);font-size:17px;max-width:60ch}
+.compare{margin-top:44px;border:1px solid var(--line);border-radius:var(--r3);overflow:hidden;background:var(--surface)}
+.compare .row{display:grid;grid-template-columns:200px 1fr 1fr;border-top:1px solid var(--line-2)}
+.compare .row:first-child{border-top:0;background:var(--surface-2);font-size:13px;font-weight:600;color:var(--muted)}
+.compare .row > div{padding:16px 20px}
+.compare .row > div:first-child{font-weight:600}
+.compare .row > div:last-child{color:var(--ink)}
+.compare .row > div:nth-child(2){color:var(--muted)}
+.compare .row:not(:first-child) > div:last-child{background:linear-gradient(90deg,var(--brand-soft),transparent 70%)}
+.steps{margin-top:48px;display:grid;grid-template-columns:repeat(4,1fr);gap:0;counter-reset:s;list-style:none;padding:0}
+.steps li{padding:0 26px 0 0;position:relative}
+.steps li::before{counter-increment:s;content:counter(s);display:grid;place-items:center;width:34px;height:34px;border-radius:50%;border:1.5px solid var(--brand);color:var(--brand-ink);font-weight:700;margin-bottom:18px;background:var(--paper)}
+.steps li:not(:last-child)::after{content:"";position:absolute;left:42px;right:8px;top:17px;height:1.5px;background:var(--line)}
+.steps h3{font-size:18px}
+.steps p{margin-top:8px;color:var(--ink-2);font-size:15px}
+.fields{margin-top:44px;display:grid;grid-template-columns:1fr 1fr;gap:40px}
+.fields h3{font-size:17px;margin-bottom:14px}
+.fields ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.fields li{border:1px solid var(--line);background:var(--surface);border-radius:8px;padding:7px 12px;font-size:14px;font-weight:500}
+.principles{margin-top:48px;display:grid;grid-template-columns:repeat(2,1fr);gap:0;border-top:1px solid var(--line)}
+.principles > div{padding:28px 32px 28px 0;border-bottom:1px solid var(--line)}
+.principles > div:nth-child(odd){border-right:1px solid var(--line)}
+.principles > div:nth-child(even){padding-left:32px}
+.principles h3{font-size:19px}
+.principles p{margin-top:8px;color:var(--ink-2)}
+.scope{margin-top:40px;display:grid;grid-template-columns:1fr 1fr;gap:20px}
+.scope > div{border:1px solid var(--line);border-radius:var(--r3);padding:24px;background:var(--surface)}
+.scope h3{font-size:16px;margin-bottom:10px}
+.scope ul{margin:0;padding-left:18px;color:var(--ink-2)}
+.scope li{margin:5px 0}
+.cta-band{padding:88px 0;background:var(--brand);color:var(--on-brand)}
+.cta-band h2{font-size:clamp(28px,3.6vw,44px);font-weight:700;letter-spacing:-.03em;max-width:20ch}
+.cta-band p{margin-top:12px;opacity:.85;font-size:17px;max-width:52ch}
+.cta-band .btn{margin-top:28px;background:var(--on-brand);color:var(--brand);border-color:var(--on-brand)}
+.lfoot{padding:28px 0 40px;color:var(--muted);font-size:13.5px}
+.lfoot .wrapx{display:flex;justify-content:space-between;gap:16px;flex-wrap:wrap}
+
+/* ============ AUTH ============ */
+.auth{min-height:100vh;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+.auth-side{background:var(--brand);color:var(--on-brand);padding:40px 48px;display:flex;flex-direction:column;justify-content:space-between;position:relative;overflow:hidden}
+.auth-side .logo{color:var(--on-brand)}
+.auth-side .logo-mark{background:var(--on-brand)}
+.auth-side .logo-mark::before{background:var(--brand);box-shadow:0 5px 0 var(--brand),0 10px 0 var(--brand)}
+.auth-side blockquote{margin:0;font-size:clamp(24px,2.4vw,32px);font-weight:600;letter-spacing:-.02em;line-height:1.25;max-width:20ch}
+.auth-side .sub{margin-top:16px;opacity:.8;max-width:42ch}
+.auth-side .lines{position:absolute;right:-60px;top:110px;width:330px;opacity:.12}
+.auth-side .lines div{height:10px;background:var(--on-brand);border-radius:5px;margin-bottom:18px}
+.auth-side small{opacity:.7}
+.auth-main{display:flex;align-items:center;justify-content:center;padding:40px 24px}
+.auth-card{width:100%;max-width:400px}
+.auth-card h1{font-size:30px;font-weight:700;letter-spacing:-.03em}
+.auth-card .sub{margin-top:8px;color:var(--muted)}
+.form{margin-top:28px;display:flex;flex-direction:column;gap:16px}
+.fld label{display:block;font-weight:600;font-size:13.5px;margin-bottom:6px}
+.fld input{width:100%;padding:11px 13px;border:1px solid var(--line);border-radius:8px;background:var(--surface);font-size:15px}
+.fld input:focus{outline:none;border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.fld .row{display:flex;justify-content:space-between;align-items:baseline}
+.fld .hint{font-size:12.5px;color:var(--muted);margin-top:6px}
+.fld.err input{border-color:var(--bad)}
+.fld .msg{font-size:12.5px;color:var(--bad);margin-top:6px;display:none}
+.fld.err .msg{display:block}
+.pw{position:relative}
+.pw button{position:absolute;right:6px;top:50%;transform:translateY(-50%);background:none;border:0;color:var(--muted);cursor:pointer;font-size:13px;font-weight:600;padding:6px 8px}
+.meter{display:flex;gap:4px;margin-top:8px}
+.meter i{flex:1;height:4px;border-radius:2px;background:var(--line)}
+.meter[data-s="1"] i:nth-child(-n+1){background:var(--bad)}
+.meter[data-s="2"] i:nth-child(-n+2){background:var(--warn)}
+.meter[data-s="3"] i:nth-child(-n+3){background:var(--brand)}
+.meter[data-s="4"] i{background:var(--brand)}
+.divider{display:flex;align-items:center;gap:12px;color:var(--muted);font-size:13px;margin:4px 0}
+.divider::before,.divider::after{content:"";flex:1;height:1px;background:var(--line)}
+.alert{padding:11px 14px;border-radius:8px;font-size:14px}
+.alert.bad{background:var(--bad-soft);color:var(--bad)}
+.alert.ok{background:var(--ok-soft);color:var(--ok)}
+.alert.info{background:var(--surface-2);color:var(--ink-2);border:1px solid var(--line-2)}
+.switch{margin-top:24px;font-size:14px;color:var(--muted);text-align:center}
+.linkb{background:none;border:0;padding:0;color:var(--brand-ink);font-weight:600;cursor:pointer;text-decoration:underline;text-underline-offset:3px;font-size:inherit}
+.check{display:flex;gap:9px;align-items:flex-start;font-size:13.5px;color:var(--ink-2)}
+.check input{margin-top:3px;accent-color:var(--brand)}
+.demo-note{margin-top:22px;font-size:12.5px;color:var(--muted);text-align:center}
+
+/* ============ APP ============ */
+.atop{position:sticky;top:env(safe-area-inset-top,0px);z-index:40;background:var(--surface);border-bottom:1px solid var(--line);height:60px;display:flex;align-items:center;gap:20px;padding:0 20px}
+.atabs{display:flex;gap:4px;height:100%}
+.atabs button{background:none;border:0;border-bottom:2px solid transparent;padding:0 12px;cursor:pointer;color:var(--muted);font-weight:600;font-size:14.5px;height:100%}
+.atabs button:hover{color:var(--ink)}
+.atabs button[aria-current="page"]{color:var(--ink);border-bottom-color:var(--brand)}
+.atop .right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.avatar{width:34px;height:34px;border-radius:50%;background:var(--brand-soft);color:var(--brand-ink);display:grid;place-items:center;font-weight:700;font-size:13px;border:0;cursor:pointer}
+.menu{position:absolute;right:16px;top:56px;background:var(--surface);border:1px solid var(--line);border-radius:var(--r2);box-shadow:var(--shadow);min-width:240px;padding:6px;display:none;z-index:50}
+.menu.on{display:block}
+.menu .who{padding:10px 12px 12px;border-bottom:1px solid var(--line-2);margin-bottom:6px}
+.menu .who b{display:block}
+.menu .who span{color:var(--muted);font-size:13px;word-break:break-all}
+.menu button{display:flex;width:100%;gap:9px;align-items:center;background:none;border:0;padding:9px 12px;border-radius:6px;cursor:pointer;text-align:left;font-size:14px}
+.menu button:hover{background:var(--surface-2)}
+.engine{display:inline-flex;align-items:center;gap:7px;font-size:13px;color:var(--muted);padding:5px 10px;border-radius:999px;border:1px solid var(--line-2);background:var(--surface-2);cursor:help}
+.engine i{width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.engine.ai i{background:var(--brand)}
+.engine.rules i{background:var(--warn)}
+
+.page{padding:20px}
+.grid{display:grid;grid-template-columns:250px minmax(0,1fr) 400px;gap:16px;align-items:start}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:var(--r3)}
+.ph{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:14px 16px;border-bottom:1px solid var(--line-2)}
+.ph h2{font-size:15px}
+.docs .body{padding:12px}
+.dz{border:1.5px dashed var(--line);border-radius:var(--r2);padding:18px 14px;text-align:center;cursor:pointer;background:var(--surface-2);transition:border-color .15s,background .15s;display:block}
+.dz:hover,.dz.over{border-color:var(--brand);background:var(--brand-soft)}
+.dz b{display:block;font-size:14px}
+.dz span{font-size:12.5px;color:var(--muted)}
+.dlist{list-style:none;padding:0;margin:12px 0 0;display:flex;flex-direction:column;gap:6px}
+.ditem{border:1px solid var(--line-2);border-radius:var(--r2);padding:10px 12px;cursor:pointer;background:var(--surface);transition:border-color .15s}
+.ditem:hover{border-color:var(--line)}
+.ditem.sel{border-color:var(--brand);box-shadow:0 0 0 3px var(--brand-soft)}
+.ditem .nm{display:flex;gap:8px;align-items:flex-start;font-weight:600;font-size:13.5px;line-height:1.35;word-break:break-word}
+.ditem .nm svg{margin-top:2px;color:var(--muted)}
+.ditem .meta{margin-top:7px;display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.prog{height:4px;background:var(--line-2);border-radius:2px;margin-top:9px;overflow:hidden}
+.prog i{display:block;height:100%;background:var(--brand);border-radius:2px;transition:width .3s}
+.sampleline{margin-top:10px;font-size:13px;color:var(--muted);text-align:center}
+
+.center{display:flex;flex-direction:column;gap:16px;min-width:0}
+.dhead{padding:18px 20px}
+.dhead .top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;flex-wrap:wrap}
+.dhead h2{font-size:19px;word-break:break-word}
+.dhead .meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;margin-top:10px}
+.dhead .why{margin-top:8px;font-size:13.5px;color:var(--muted);max-width:75ch}
+.revbar{display:flex;align-items:center;gap:14px;margin-top:16px;flex-wrap:wrap}
+.revbar .prog{flex:1;min-width:140px;height:8px;margin:0;border-radius:4px}
+.revbar .prog i{border-radius:4px}
+.revbar .lbl{font-size:13px;color:var(--muted);white-space:nowrap}
+.toolbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding:12px 20px;border-top:1px solid var(--line-2)}
+.seg{display:inline-flex;border:1px solid var(--line);border-radius:8px;padding:2px;background:var(--surface-2)}
+.seg button{border:0;background:none;padding:5px 11px;border-radius:6px;cursor:pointer;font-size:13px;font-weight:600;color:var(--muted)}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:0 1px 2px rgba(0,0,0,.08)}
+.grow{flex:1}
+.tw{overflow-x:auto}
+table.t{border-collapse:collapse;width:100%;font-size:14px}
+.t th,.t td{text-align:left;padding:10px 14px;border-bottom:1px solid var(--line-2);vertical-align:middle}
+.t th{font-weight:600;font-size:12.5px;color:var(--muted);background:var(--surface-2);white-space:nowrap}
+.t td.n,.t th.n{text-align:right}
+.t tr:last-child td{border-bottom:0}
+.t tbody tr{transition:background .12s}
+.t tbody tr:hover{background:var(--surface-2)}
+.t tr.flag-warn td:first-child{box-shadow:inset 3px 0 0 var(--warn)}
+.t tr.flag-bad td:first-child{box-shadow:inset 3px 0 0 var(--bad)}
+.t tr.cur{background:var(--mark-soft)!important}
+.t tr:focus-visible{outline:2px solid var(--focus);outline-offset:-2px}
+.fl{font-weight:500;min-width:110px}
+.sc{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.t.cmp th,.t.cmp td{padding:9px 8px}
+.t.cmp td:first-child,.t.cmp th:first-child{padding-left:14px;min-width:150px}
+.v{font-weight:600;font-size:14.5px}
+.v.none{color:var(--muted);font-weight:500;font-style:italic}
+.why2{font-size:12.5px;color:var(--muted);margin-top:3px;max-width:44ch;line-height:1.4}
+.srcb{display:inline-flex;align-items:center;gap:5px;background:var(--surface-2);border:1px solid var(--line-2);border-radius:6px;padding:3px 8px;cursor:pointer;font-size:12.5px;font-weight:600;color:var(--ink-2);white-space:nowrap}
+.srcb:hover{border-color:var(--brand);color:var(--brand-ink)}
+.srcb[disabled]{opacity:.5;cursor:default}
+.acts{display:flex;gap:6px;justify-content:flex-end;white-space:nowrap}
+.done{display:inline-flex;align-items:center;gap:5px;color:var(--ok);font-weight:600;font-size:13px;white-space:nowrap}
+.pend{color:var(--muted);font-size:13px;white-space:nowrap}
+input.ed{width:100%;min-width:120px;padding:7px 9px;border:1px solid var(--brand);border-radius:6px;background:var(--surface);box-shadow:0 0 0 3px var(--brand-soft)}
+.cellb{background:none;border:1px solid transparent;border-radius:6px;padding:3px 7px;cursor:pointer;font-weight:600;width:100%;text-align:right;font-size:14px}
+.cellb:hover{border-color:var(--line)}
+.cellb.w{background:var(--warn-soft);color:var(--warn)}
+.cellb.b{background:var(--bad-soft);color:var(--bad);font-weight:500;font-style:italic}
+.cellb.e{box-shadow:inset 0 -2px 0 var(--brand)}
+.cellb.cur{outline:2px solid var(--hl-line)}
+.coname{background:none;border:0;padding:0;cursor:pointer;font-weight:600;text-align:left;font-size:14px}
+.kbd{display:inline-block;border:1px solid var(--line);border-bottom-width:2px;border-radius:4px;padding:0 5px;font-size:11.5px;font-weight:600;color:var(--muted);background:var(--surface)}
+.foot{padding:12px 20px;border-top:1px solid var(--line-2);font-size:13px;color:var(--muted)}
+
+.process{padding:28px 24px}
+.process h3{font-size:16px;margin-bottom:18px}
+.tl{list-style:none;padding:0;margin:0}
+.tl li{display:flex;gap:12px;align-items:flex-start;padding:0 0 18px;position:relative;color:var(--muted)}
+.tl li:not(:last-child)::after{content:"";position:absolute;left:10px;top:24px;bottom:2px;width:1.5px;background:var(--line)}
+.tl .dot{width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);flex:none;display:grid;place-items:center;background:var(--surface);position:relative;z-index:1}
+.tl li.done{color:var(--ink)}
+.tl li.done .dot{background:var(--brand);border-color:var(--brand);color:var(--on-brand)}
+.tl li.now{color:var(--ink);font-weight:600}
+.tl li.now .dot{border-color:var(--brand);border-top-color:transparent;animation:sp .9s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+@media (prefers-reduced-motion: reduce){.tl li.now .dot{animation-duration:3s}}
+.tl small{display:block;font-weight:400;color:var(--muted);font-size:13px}
+
+.onb{padding:40px 36px}
+.onb h2{font-size:26px;letter-spacing:-.025em;max-width:24ch}
+.onb p{margin-top:10px;color:var(--ink-2);max-width:60ch}
+.onb .two{margin-top:26px;display:flex;gap:12px;flex-wrap:wrap}
+.onb .samples{margin-top:30px;border-top:1px solid var(--line-2);padding-top:22px}
+.onb .samples h3{font-size:14.5px;margin-bottom:12px}
+.onb .samples ul{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+.onb .samples li{display:grid;grid-template-columns:auto 1fr;gap:12px;align-items:start;font-size:14px}
+.onb .samples li b{display:block}
+.onb .samples li span{color:var(--muted);font-size:13.5px}
+
+.viewer{position:sticky;top:80px}
+.viewer .panel{display:flex;flex-direction:column;max-height:calc(100vh - 100px);overflow:hidden}
+.vctx{padding:14px 16px;border-bottom:1px solid var(--line-2)}
+.vctx .lab{font-size:13px;color:var(--muted)}
+.vctx .val{font-size:20px;font-weight:700;letter-spacing:-.01em;margin-top:2px;word-break:break-word}
+.vctx .q{margin-top:10px;padding:8px 12px;background:var(--mark-soft);color:var(--mark-ink);border-radius:6px;font-size:13px}
+.vctx .nt{margin-top:8px;font-size:13px;color:var(--muted)}
+.vnav{display:flex;align-items:center;gap:6px;padding:8px 12px;border-bottom:1px solid var(--line-2);font-size:13px}
+.vbody{overflow:auto;padding:16px;background:var(--surface-2);flex:1;min-height:200px}
+.pagebox{position:relative;margin:0 auto;box-shadow:0 2px 10px rgba(0,0,0,.14);background:#fff;border-radius:2px}
+.pagebox canvas{display:block;width:100%;height:auto;border-radius:2px}
+.hlbox{position:absolute;background:var(--hl);outline:2px solid var(--hl-line);border-radius:3px;pointer-events:none;animation:pulse 1.2s ease 1}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(243,201,63,.7)}100%{box-shadow:0 0 0 14px rgba(243,201,63,0)}}
+.vempty{padding:44px 20px;text-align:center;color:var(--muted);font-size:14px}
+.vempty svg{width:34px;height:34px;margin-bottom:10px;stroke-width:1.4}
+.vclose{display:none}
+
+.wrapp{max-width:1080px;margin:0 auto}
+.ptitle{display:flex;justify-content:space-between;align-items:flex-end;gap:12px;margin:8px 0 18px;flex-wrap:wrap}
+.ptitle h1{font-size:26px;letter-spacing:-.025em}
+.ptitle p{color:var(--muted);margin-top:4px}
+.emptyp{padding:48px 24px;text-align:center;color:var(--muted)}
+
+dialog{border:1px solid var(--line);border-radius:var(--r3);background:var(--surface);color:var(--ink);max-width:min(560px,94vw);width:100%;padding:0;box-shadow:var(--shadow)}
+dialog::backdrop{background:rgba(10,16,14,.5)}
+.dlg{padding:24px}
+.dlg h2{font-size:20px}
+.dlg .sub{color:var(--muted);margin-top:6px;font-size:14px}
+.sheets{margin:18px 0;border:1px solid var(--line-2);border-radius:var(--r2)}
+.sheets div{display:flex;justify-content:space-between;padding:10px 14px;border-top:1px solid var(--line-2);font-size:14px}
+.sheets div:first-child{border-top:0}
+.sheets span{color:var(--muted)}
+.dlg .acts{margin-top:20px}
+.toast{position:fixed;left:50%;bottom:calc(24px + env(safe-area-inset-bottom,0px));transform:translate(-50%,10px);background:var(--ink);color:var(--paper);padding:10px 18px;border-radius:10px;font-size:14px;z-index:80;opacity:0;transition:opacity .2s,transform .2s;pointer-events:none;max-width:90vw;box-shadow:var(--shadow)}
+.toast.on{opacity:1;transform:translate(-50%,0)}
+
+@media (max-width:1240px){
+  .grid{grid-template-columns:260px minmax(0,1fr)}
+  .viewer{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:45;display:none}
+  .viewer.open{display:block}
+  .viewer .panel{max-height:80vh;border-radius:var(--r3) var(--r3) 0 0;box-shadow:0 -10px 40px rgba(0,0,0,.25);padding-bottom:env(safe-area-inset-bottom,0px)}
+  .vclose{display:inline-flex}
+}
+@media (max-width:900px){
+  .hero{grid-template-columns:1fr;padding-top:44px;padding-bottom:64px;gap:44px}
+  .demo{min-height:520px}
+  .compare .row{grid-template-columns:1fr}
+  .compare .row:first-child{display:none}
+  .compare .row > div{padding:10px 18px}
+  .compare .row > div:first-child{padding-top:16px;padding-bottom:2px}
+  .compare .row > div:nth-child(2)::before{content:"Today: ";font-weight:600}
+  .compare .row > div:last-child::before{content:"With Sourcemark: ";font-weight:600}
+  .steps{grid-template-columns:1fr 1fr;row-gap:36px}
+  .steps li:nth-child(2)::after{display:none}
+  .fields,.scope,.principles{grid-template-columns:1fr}
+  .principles > div:nth-child(odd){border-right:0}
+  .principles > div:nth-child(even){padding-left:0}
+  .lnav nav{display:none}
+  .auth{grid-template-columns:1fr}
+  .auth-side{display:none}
+  .grid{grid-template-columns:1fr}
+  .atop{gap:8px;padding:0 12px}
+  .atabs button{padding:0 8px}
+  .engine span{display:none}
+  .page{padding:12px}
+  .band{padding:64px 0}
+}
+@media (max-width:560px){
+  .steps{grid-template-columns:1fr}
+  .steps li::after{display:none}
+  .mock-page{width:96%}
+  .mock-x{width:88%}
+  .lnav .right .btn.ghost{display:none}
+  .atop .logo span{display:none}
+}
+</style>
+</head>
+<body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M12 16V4M7 9l5-5 5 5M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3"/></symbol>
+  <symbol id="i-file" viewBox="0 0 24 24"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-edit" viewBox="0 0 24 24"><path d="M4 20h4L19 9l-4-4L4 16z"/></symbol>
+  <symbol id="i-undo" viewBox="0 0 24 24"><path d="M9 14L4 9l5-5"/><path d="M4 9h10a6 6 0 0 1 0 12h-3"/></symbol>
+  <symbol id="i-eye" viewBox="0 0 24 24"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h11"/></symbol>
+  <symbol id="i-dl" viewBox="0 0 24 24"><path d="M12 4v12M7 11l5 5 5-5M4 20h16"/></symbol>
+  <symbol id="i-sheet" viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16" rx="1.5"/><path d="M4 10h16M4 15h16M10 4v16"/></symbol>
+  <symbol id="i-left" viewBox="0 0 24 24"><path d="M15 6l-6 6 6 6"/></symbol>
+  <symbol id="i-right" viewBox="0 0 24 24"><path d="M9 6l6 6-6 6"/></symbol>
+  <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+  <symbol id="i-minus" viewBox="0 0 24 24"><path d="M5 12h14"/></symbol>
+  <symbol id="i-refresh" viewBox="0 0 24 24"><path d="M20 11a8 8 0 1 0-2.3 5.7M20 4v7h-7"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13"/></symbol>
+</svg>
+
+<!-- ======================= LANDING ======================= -->
+<div class="view" id="v-home">
+  <header class="lnav" id="lnav">
+    <div class="in">
+      <a class="logo" href="#home"><span class="logo-mark" aria-hidden="true"></span><span>Sourcemark</span></a>
+      <nav aria-label="Page sections">
+        <button data-scroll="s-problem">Why</button>
+        <button data-scroll="s-how">How it works</button>
+        <button data-scroll="s-fields">What it extracts</button>
+        <button data-scroll="s-control">Controls</button>
+      </nav>
+      <div class="right">
+        <a class="btn ghost" href="#signin">Sign in</a>
+        <a class="btn primary" href="#signup">Try the demo</a>
+      </div>
+    </div>
+  </header>
+
+  <main>
+    <section class="wrapx hero">
+      <div>
+        <h1>Every figure, traced back to its page.</h1>
+        <p class="lede">Upload fund reports and get commitments, cash flows, NAV and portfolio values out as structured data, each linked to the exact line it came from. Nothing reaches Excel until an analyst approves it.</p>
+        <div class="ctas">
+          <a class="btn primary lg" href="#signup">Try the demo</a>
+          <button class="btn lg" data-scroll="s-how">See how it works</button>
+        </div>
+        <p class="fine">Proof of concept with synthetic sample reports. No setup needed.</p>
+      </div>
+      <div class="demo" aria-hidden="true">
+        <div class="mock-page">
+          <div class="t1">Kestrel Infrastructure Fund II SCSp</div>
+          <div class="t2">Investor Capital Account, quarter ended 30 June 2026</div>
+          <table>
+            <tr><th>Item</th><th>USD</th></tr>
+            <tr><td>Commitment</td><td>40,000,000</td></tr>
+            <tr><td>Paid-in capital</td><td>27,300,000</td></tr>
+            <tr><td>Cumulative distributions</td><td>3,880,000</td></tr>
+            <tr><td>Net asset value at 30 June 2026</td><td><span class="mark">29,410,600</span></td></tr>
+          </table>
+          <div class="filler" style="width:92%"></div><div class="filler" style="width:70%"></div><div class="filler" style="width:84%"></div>
+          <div class="pg">Page 3</div>
+        </div>
+        <div class="mock-x">
+          <div class="hd"><b>Extracted for review</b><span class="chip brand">Capital account</span></div>
+          <div class="mx-row"><span>Total commitment</span><span class="v">40,000,000</span><span class="chip ok">p.3</span></div>
+          <div class="mx-row"><span>Contributions</span><span class="v">27,300,000</span><span class="chip ok">p.3</span></div>
+          <div class="mx-row"><span>Distributions</span><span class="v">3,880,000</span><span class="chip ok">p.3</span></div>
+          <div class="mx-row on"><span>NAV</span><span class="v">29,410,600</span><span class="chip markc">p.3</span></div>
+          <div class="mx-row"><span>Unfunded commitment</span><span class="v" style="color:var(--bad)">Not stated</span><span class="chip bad">Flagged</span></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band alt" id="s-problem">
+      <div class="wrapx">
+        <h2 class="sec-h">Reporting arrives as PDFs. Analysis happens in Excel. The gap is manual.</h2>
+        <p class="sec-p">Advisory teams receive capital account statements, portfolio summaries and quarterly reports from every GP, each in its own layout. Today the figures are found, re-keyed and checked by hand.</p>
+        <div class="compare" role="table" aria-label="Today compared with Sourcemark">
+          <div class="row" role="row"><div role="columnheader">Task</div><div role="columnheader">Today</div><div role="columnheader">With Sourcemark</div></div>
+          <div class="row" role="row"><div role="cell">Finding figures</div><div role="cell">Reading each report page by page</div><div role="cell">Document type identified and fields located automatically</div></div>
+          <div class="row" role="row"><div role="cell">Moving data</div><div role="cell">Re-keying values into spreadsheets</div><div role="cell">One-click export to a structured Excel workbook</div></div>
+          <div class="row" role="row"><div role="cell">Checking</div><div role="cell">Cross-referencing numbers by eye</div><div role="cell">Each value matched to its page and highlighted on the original</div></div>
+          <div class="row" role="row"><div role="cell">Gaps</div><div role="cell">Easy to miss, or fill in from memory</div><div role="cell">Flagged as missing or uncertain, never invented</div></div>
+          <div class="row" role="row"><div role="cell">Audit trail</div><div role="cell">Scattered across emails and file versions</div><div role="cell">Every edit and approval logged and exported</div></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="s-how">
+      <div class="wrapx">
+        <h2 class="sec-h">Four steps from PDF to approved data</h2>
+        <ol class="steps">
+          <li><h3>Upload</h3><p>Drop in capital account statements, portfolio summaries or quarterly reports.</p></li>
+          <li><h3>Process</h3><p>AI classifies each document and extracts the agreed fund and portfolio fields.</p></li>
+          <li><h3>Review</h3><p>Check each value against the highlighted source page. Edit, approve or confirm what’s missing.</p></li>
+          <li><h3>Export</h3><p>Download approved values to Excel, with an exceptions sheet and full audit log.</p></li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="band alt" id="s-fields">
+      <div class="wrapx">
+        <h2 class="sec-h">The fields analysts actually move into models</h2>
+        <div class="fields">
+          <div><h3>Fund and LP information</h3><ul><li>Fund name</li><li>Reporting date</li><li>Total commitment</li><li>Capital contributions</li><li>Distributions</li><li>Unfunded commitment</li><li>Capital account balance / NAV</li></ul></div>
+          <div><h3>Portfolio companies</h3><ul><li>Company name</li><li>Investment cost</li><li>Current fair value</li><li>Ownership percentage</li><li>Revenue</li><li>EBITDA</li><li>Net debt</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="band" id="s-control">
+      <div class="wrapx">
+        <h2 class="sec-h">Built so the analyst stays in control</h2>
+        <div class="principles">
+          <div><h3>No invented numbers</h3><p>Values are copied exactly as printed. If a figure isn’t stated, it’s flagged as missing, even when it could be derived.</p></div>
+          <div><h3>A source for every value</h3><p>Each figure carries its page reference and is checked against that page’s text before you see it.</p></div>
+          <div><h3>Approval before export</h3><p>Clean values can be approved in one step. Flagged values need an explicit decision.</p></div>
+          <div><h3>A complete record</h3><p>Original values, edits, approvals and exports are logged and included in the workbook.</p></div>
+        </div>
+        <div class="scope">
+          <div><h3>In this proof of concept</h3><ul><li>PDF upload, classification and extraction</li><li>Source verification and page highlighting</li><li>Review, edit and approval workflow</li><li>Excel export with exceptions and audit log</li></ul></div>
+          <div><h3>Not yet included</h3><ul><li>Data room, CRM or DealCloud connections</li><li>Production sign-in and user management</li><li>Scanned (image-only) PDFs</li><li>Valuation or modelling calculations</li></ul></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="cta-band">
+      <div class="wrapx">
+        <h2>See it on three sample fund reports.</h2>
+        <p>Synthetic statements modelled on Invest Europe and ILPA layouts, with the gaps and ambiguities real reports have.</p>
+        <a class="btn lg" href="#signup">Try the demo</a>
+      </div>
+    </section>
+  </main>
+  <footer class="lfoot"><div class="wrapx"><span>Sourcemark is a proof of concept built by Clustox. Sample data is synthetic.</span><span>Prepared for private capital advisory teams</span></div></footer>
+</div>
+
+<!-- ======================= AUTH ======================= -->
+<div class="view" id="v-auth">
+  <div class="auth">
+    <aside class="auth-side">
+      <a class="logo" href="#home"><span class="logo-mark" aria-hidden="true"></span><span>Sourcemark</span></a>
+            <div>
+        <blockquote>From fund report to approved Excel, without re-keying a single figure.</blockquote>
+        <p class="sub">Every value arrives with its source page, so review is a check, not a search.</p>
+      </div>
+      <small>Proof of concept by Clustox</small>
+    </aside>
+    <main class="auth-main">
+      <div class="auth-card" id="authCard"></div>
+    </main>
+  </div>
+</div>
+
+<!-- ======================= APP ======================= -->
+<div class="view" id="v-app">
+  <header class="atop">
+    <a class="logo" href="#app"><span class="logo-mark" aria-hidden="true"></span><span>Sourcemark</span></a>
+    <nav class="atabs" aria-label="App">
+      <button data-go="app">Review</button>
+      <button data-go="exports">Exports</button>
+      <button data-go="activity">Activity</button>
+    </nav>
+    <div class="right">
+      <span class="engine" id="engine" title=""><i></i><span>Connecting</span></span>
+      <button class="avatar" id="avatar" aria-haspopup="true" aria-expanded="false"></button>
+    </div>
+    <div class="menu" id="menu" role="menu">
+      <div class="who"><b id="mName"></b><span id="mEmail"></span></div>
+      <button role="menuitem" id="mAbout"><svg class="i"><use href="#i-eye"/></svg>What’s live in this demo</button>
+      <button role="menuitem" id="mOut"><svg class="i"><use href="#i-out"/></svg>Sign out</button>
+    </div>
+  </header>
+
+  <div class="page" id="p-app">
+    <div class="grid">
+      <aside class="panel docs">
+        <div class="ph"><h2>Documents</h2><span class="chip mute" id="docCount">0</span></div>
+        <div class="body">
+          <label class="dz" id="dz" tabindex="0">
+            <svg class="i" style="width:22px;height:22px;color:var(--brand-ink);margin-bottom:4px"><use href="#i-up"/></svg>
+            <b>Upload PDF reports</b><span>Drop files or browse</span>
+            <input type="file" id="fileIn" accept="application/pdf,.pdf" multiple hidden>
+          </label>
+          <div class="sampleline">or <button class="linkb" id="loadSamples">load 3 sample reports</button></div>
+          <ul class="dlist" id="dlist"></ul>
+        </div>
+      </aside>
+      <section class="center" id="center" aria-live="polite"></section>
+      <aside class="viewer" id="viewer" aria-label="Source document">
+        <div class="panel">
+          <div class="ph"><h2>Source</h2><button class="btn sm vclose" id="vclose"><svg class="i"><use href="#i-x"/></svg>Close</button></div>
+          <div id="vctx"></div>
+          <div class="vnav" id="vnav" hidden>
+            <button class="btn icon sm" id="pPrev" aria-label="Previous page"><svg class="i"><use href="#i-left"/></svg></button>
+            <span id="pLbl"></span>
+            <button class="btn icon sm" id="pNext" aria-label="Next page"><svg class="i"><use href="#i-right"/></svg></button>
+            <span class="grow"></span>
+            <button class="btn icon sm" id="zOut" aria-label="Zoom out"><svg class="i"><use href="#i-minus"/></svg></button>
+            <button class="btn icon sm" id="zIn" aria-label="Zoom in"><svg class="i"><use href="#i-plus"/></svg></button>
+          </div>
+          <div class="vbody" id="vbody"></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+
+  <div class="page" id="p-exports" hidden><div class="wrapp">
+    <div class="ptitle"><div><h1>Exports</h1><p>Workbooks generated in this session.</p></div><button class="btn primary" id="newExport"><svg class="i"><use href="#i-sheet"/></svg>New export</button></div>
+    <div class="panel" id="exportsList"></div>
+  </div></div>
+
+  <div class="page" id="p-activity" hidden><div class="wrapp">
+    <div class="ptitle"><div><h1>Activity</h1><p>Every upload, extraction, edit, approval and export in this session. Included in each export.</p></div></div>
+    <div class="panel" id="activityList"></div>
+  </div></div>
+</div>
+
+<dialog id="dExport"><div class="dlg" id="dExportBody"></div></dialog>
+<dialog id="dAbout"><div class="dlg">
+  <h2>What’s live in this demo</h2>
+  <div class="sheets" style="margin-top:16px">
+    <div style="display:block"><b>Working</b><p style="color:var(--ink-2);margin-top:4px;font-size:14px">PDF reading in the browser, AI classification and extraction, automatic check of each value against its cited page, page highlighting, edit and approval, Excel export with exceptions and audit log, cross-document consistency check.</p></div>
+    <div style="display:block"><b>Simulated</b><p style="color:var(--ink-2);margin-top:4px;font-size:14px">Sign-in and accounts are stored only in this browser to show the flow. Work is kept for this session only.</p></div>
+    <div style="display:block"><b>Fallback</b><p style="color:var(--ink-2);margin-top:4px;font-size:14px">If AI extraction isn’t available, a rule-based extractor tuned to standard statement layouts runs instead and is labelled as such.</p></div>
+  </div>
+  <div class="acts"><button class="btn primary" id="aboutClose">Close</button></div>
+</div></dialog>
+<div class="toast" id="toast" role="status"></div>
+
+<script>
+const SAMPLE_PDFS = {"Northbridge_IV_Capital_Account_Statement_H1-2026.pdf": "JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgMTAgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNSAwIG9iago8PAovQ29udGVudHMgMTEgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNiAwIG9iago8PAovQ29udGVudHMgMTIgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgOSAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNyAwIG9iago8PAovUGFnZU1vZGUgL1VzZU5vbmUgL1BhZ2VzIDkgMCBSIC9UeXBlIC9DYXRhbG9nCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9BdXRob3IgKFwoYW5vbnltb3VzXCkpIC9DcmVhdGlvbkRhdGUgKEQ6MjAyNjEwMjkxMjM3MTcrMDAnMDAnKSAvQ3JlYXRvciAoXCh1bnNwZWNpZmllZFwpKSAvS2V5d29yZHMgKCkgL01vZERhdGUgKEQ6MjAyNjEwMjkxMjM3MTcrMDAnMDAnKSAvUHJvZHVjZXIgKFJlcG9ydExhYiBQREYgTGlicmFyeSAtIFwob3BlbnNvdXJjZVwpKSAKICAvU3ViamVjdCAoXCh1bnNwZWNpZmllZFwpKSAvVGl0bGUgKFwoYW5vbnltb3VzXCkpIC9UcmFwcGVkIC9GYWxzZQo+PgplbmRvYmoKOSAwIG9iago8PAovQ291bnQgMyAvS2lkcyBbIDQgMCBSIDUgMCBSIDYgMCBSIF0gL1R5cGUgL1BhZ2VzCj4+CmVuZG9iagoxMCAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCA4NTAKPj4Kc3RyZWFtCkdhdD0oPyN1X28nUmZHUjMwM0tmOSojWDREZjA+cDQrPUVWRyxDPExgMCksSDJDKkk5ZmNSczhUVkJvPGgzQWsvPmphYzxTcE0oVFtfQTomNUtcTkYrWUlbUjMlaSZfKjcrMGU6LCEjLj84KFM3Y2ckdEdUTywpaT9pUEYzXW8qXGppNy07aE5iLGdDaGhCZ28zaEdnOSNXJmkiXFdGcT5ALj1XRFNdS10hSnErLUtXQDBITGAmQ3FiMjNUPCkwVCduaS0nal1iUlNqJDpoblxlcyg+Yitobk1RV01CZVVGYEFmKSJ0NCgkb1gxbkRzWWlGM1hhazsxPXBQR14mPklqK2ApKGNRMD5bY1IxcW1QMWhvQktmMDlqK20mT1RAMGMlbDFxTDRwTyxRNFZTZFFwNSZUKEQ9bXRxNEwjWCxzPmg9ZFRWWDY4ZzxhWnJBXlE3OkJyVzBiUEI+O0EsbzlhQXNYTCwyUiRARW9QbWdnPzM4JE1Fc0dVLnBqMG1MXHBLPz8jNFE9cnVwYFskT2ZORjFZOVVzVipgUW4kQipbYXByTWFwWShKNkQ5OW9PITMiVmQnX0djbkpBOitAIVItcitXZ3RrNnU6aTlYcS1xcUEpZmpwPi8lYjwpKD9eV08xJissckVPYEVlX1siTXBIUzA3WmE4anBSUGBObWpEIUZILCZqOEhxXCxkOnJuZzppI1E7ISk0U0woJDV0WF43WiFvaE1RN0MsZWMjMCIkIUh0XEM8ODMyWHAqb180Ri1SLVNLSF9UKGxKJ20zODlxOWUxYWNjVjleJlksZWZoTXFaOVlSJyJXLTlnUURQKVNhZFNbMWMnIztSPkU6TzwuP1NGNm9wOG5qcDhrJzU5YF51RmEvaDglWyonY0tKQltSWUt1ZUx1RmphJ2VLWCRGOVhpdEQ5T2VkbGEjWFUwUF0lNlcuUFY/NWEtOVMjSUBzVihDWnVJZEdndUlkQ0VNbG80O29XT2pkbzk1OFc3WkBRJzc3SlVuQlQ3bGZEVTFkL3NCUDpqZm5GUVsnIygjblokOCJYMTU9JkBGUVdkYDBiSWI4PDgqYGUiJjAqYnFqNl1hQGxvbC1ZazErZE5UNidISjBpJHJXKClrYnIjfj5lbmRzdHJlYW0KZW5kb2JqCjExIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDEwODUKPj4Kc3RyZWFtCkdhdFVyPyQiXlonU2MpUCgkQkpWTnBCPEMvQmJfOiQwYGUjNVQ4RydGRzphUi4pP2RfPWtiNGg5UmhHTiorS0JYOVg/RiM9T1BUdG9DXmBNI2VrJEsqQTdFbE07W0N0ImouczYhNlNSV2Q1Oz8sY0A7QyItPytBcCdpcz9JKFxlPkZwR1tIKyMuMys/Vl8yRExAKS9UKEVQVmZIJGc4KUxYSS5nVmFuL0hKazpEJDFBb09mVl9XV1ArYkFaa05xSilFNEMoQHA6OjA0PENFTTNgUWQuZS0jIUs9YyhVT05OckFLU3EqUyhtNjBTRy9hIT5gQSsvSHVMa1tOaGEzbUY/KDhWQlInTFMlJiwsKnJqRjFsKmZDVnM5Qz9eP2xXMnRpPU1zLCtIPSotRVBwXytvWHFaSXNlOFVrQGUoW1YyLi8zVWBfOklTMDJKQ3ArKFsyJW9lJjxMW2IsXCpYbkZeWz5bTyZSNC9SL21uT0ZsdFRiUCJQNFhnIiQ2WSxqRC4zMD0yNVJKWjoyLShcT3A8JmdlWSUjJkxLbU9gOFFcIVBpWTMzIV42NC0lbGhDNktMZFNmWCFkRSQqdSQpYSExREtGbiU2RF1wNS9iKF0uQk0sUj5gYW8vNTE7TmpKMV9BIjZOVS9sK3MiJVcyWFtKXEJfalxjKUpcPGc+MmNUWFgoU29uQGNRKyUlTHAvRiRMXDZHPSNyYDNkLSRzJHRDLk0jX0dUWmUsQk8vNGJGNSxka0RGcyZeXztNUUBnUCdMJ01jXWU7IT1CNzJiWiNEKlEqbT8rUT9kNkwyOV9KJTJsRFFQalFAVkVcR1tjJF0kOXE8ZDtxdWZoaS41MnFWUyQoNFFXVm9yUF4icDxFQi1dIVtXLUJSRmhnYiVnJFFPc2xPMVlNXSlWSVcrUVBlP1tdczgtR1c0bG5yXEhOUUFGNGd1W0ROIzxRKEpKP0hMXFcqWVtQXVwubF04RSY2SCQ4YjRVKj09IWxMayQ4ZjdqQXUyZipeXihUKklDQGdzTCg5dXM8ckFYSFhBUTxyK0drWkdjQjw7JztOcGMzZTZzXipDVi4uMkE2PVgqaDRTTjJBSWEhZnJOMVwoOlRLczpDKWg3PkUnNGRrKGNDUFUpKiVVTUtwakdYPnNQOjs0TlhqaCp1MCpjUk0zM1A0azAqQkNfRTZ0aD9kYFhjXWw3LTIhVjBkNCo5QXFNRTJlZ05nLVpNbEhkcWxWLEJHWD0iQyVBV1JMT0MjWU9BKjBZUktaMTwrPCpQQFdkajszR3FlZjxFb0JKMk5zPj5kJk9rbWREZF9yKV49KE88anRAJm9II2k2ZWk8ajlKODJtZ1oxWU9iSERTbC1YXnRxVm8kMmhhQ2QhT3A3PnJxJTJQUFhGOFVKZm85RGQ3JVhbKFtCQyJnVFpmRVo/XGlcXSNjPldHLFZDTX4+ZW5kc3RyZWFtCmVuZG9iagoxMiAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCA2MjAKPj4Kc3RyZWFtCkdhdFVvPyNTRk4nU2MpUCglNV1tRmArcDRpJWNnZStdMlkqOj9uWkklKEpwImM+aD8+bSlSRjFoYzIkUi9XbDJFYTJkQVVjWy1XVVldbzwnR20vUyxcL1UsLSxIcyZCS0hzcT0kc0RhcEItMF06ZjdqKHVzITQ8MzkoRFZXMl9IOS9uKG5MRiZCLUltZTBBcyInKy5lIUFtL3VWPyJtR1giTVgtc2VTSHUnZyppWDZOLjlncG1lTWJ0XUw4KEtGZlBxOkwpV3RycWg3OE1ubkg3XCYpJF8hYk5yWSQpLkpdNCUmO0pXS0FqXmFcbiRfWE5GdTI2Vk5bb1JAKmA1UT8sdSxGNzAsdSs4Yl1ObTNPZXQqQixOcThxSTwuLz0tP0hSSEJhL01STEtLY0htcSssaHNZRnMqSDpdbDFiNz06IyxbLi5NTmFpb0hMRnBvUEgsRWNsS2tMXzt1TjdjQEkxJUwiSFI8UldeN0VAbGAtLGZLOVFnYz9LUSo9Z0YwakM/XU9wN01HYzlLYy1EMFk8XnQ4NENMalFbTDtOKi82TiMtUFtaRzUrL2FSWCw/XjlVbmtiYUhkLj5OOj1CNWxBcm1LMiwycjxKLjc/dVh1TTVtPScpK3A8WF0kUkEjVylbLGsqUGU6X2s+NDElNWA1LiNTMCYvQSUoLl85Kl1xNXNQXF81TWc2L0tiTixEXjAyTCVrRUcmODQ7PSFbNnI7S2I0OUI1dGl0cVJvXDkoalAjSUxlaWM0dFdeLCU5U2pkTjpRW0h1QTRVZ1lmL0YtQU1ZRVIlbUNAKkdFUGRhOTNxJFc+XixiPX4+ZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgMTMKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDYxIDAwMDAwIG4gCjAwMDAwMDAxMDIgMDAwMDAgbiAKMDAwMDAwMDIwOSAwMDAwMCBuIAowMDAwMDAwMzIxIDAwMDAwIG4gCjAwMDAwMDA1MjUgMDAwMDAgbiAKMDAwMDAwMDcyOSAwMDAwMCBuIAowMDAwMDAwOTMzIDAwMDAwIG4gCjAwMDAwMDEwMDEgMDAwMDAgbiAKMDAwMDAwMTI4MSAwMDAwMCBuIAowMDAwMDAxMzUyIDAwMDAwIG4gCjAwMDAwMDIyOTMgMDAwMDAgbiAKMDAwMDAwMzQ3MCAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9JRCAKWzxjZjYzNWZmNzBkOTJhNWQxM2ZjM2RjZTY2NmQwNGI5OT48Y2Y2MzVmZjcwZDkyYTVkMTNmYzNkY2U2NjZkMDRiOTk+XQolIFJlcG9ydExhYiBnZW5lcmF0ZWQgUERGIGRvY3VtZW50IC0tIGRpZ2VzdCAob3BlbnNvdXJjZSkKCi9JbmZvIDggMCBSCi9Sb290IDcgMCBSCi9TaXplIDEzCj4+CnN0YXJ0eHJlZgo0MTgxCiUlRU9GCg==", "Northbridge_IV_Portfolio_Summary_Q2-2026.pdf": "JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgOSAwIFIgL01lZGlhQm94IFsgMCAwIDU5NS4yNzU2IDg0MS44ODk4IF0gL1BhcmVudCA4IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago1IDAgb2JqCjw8Ci9Db250ZW50cyAxMCAwIFIgL01lZGlhQm94IFsgMCAwIDU5NS4yNzU2IDg0MS44ODk4IF0gL1BhcmVudCA4IDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9QYWdlTW9kZSAvVXNlTm9uZSAvUGFnZXMgOCAwIFIgL1R5cGUgL0NhdGFsb2cKPj4KZW5kb2JqCjcgMCBvYmoKPDwKL0F1dGhvciAoXChhbm9ueW1vdXNcKSkgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MTAyOTEyMzcxNyswMCcwMCcpIC9DcmVhdG9yIChcKHVuc3BlY2lmaWVkXCkpIC9LZXl3b3JkcyAoKSAvTW9kRGF0ZSAoRDoyMDI2MTAyOTEyMzcxNyswMCcwMCcpIC9Qcm9kdWNlciAoUmVwb3J0TGFiIFBERiBMaWJyYXJ5IC0gXChvcGVuc291cmNlXCkpIAogIC9TdWJqZWN0IChcKHVuc3BlY2lmaWVkXCkpIC9UaXRsZSAoXChhbm9ueW1vdXNcKSkgL1RyYXBwZWQgL0ZhbHNlCj4+CmVuZG9iago4IDAgb2JqCjw8Ci9Db3VudCAyIC9LaWRzIFsgNCAwIFIgNSAwIFIgXSAvVHlwZSAvUGFnZXMKPj4KZW5kb2JqCjkgMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMTQyMQo+PgpzdHJlYW0KR2F0bTpnTVliKiY6TWwrYmZeKFBAYHNXRjslYVpBaSQ7J2VfSnUpSj5HKzVmKG43dGE4bFI6XiZIX1ViRzllXUdTMkk+dVlSXVpOR19WX0s0PCxDTCpyYVJcST89USNgVU1pTCFiRHFISi1tSkNUIm08THEvT2lCIk41NTVVQCgjUiZta1tQcltjVnAhOj1DbS5JZTdBJHM2JzFPP3U6KF88RWQwV20qbm4vQ3RlKCgzczImQCZBaChrYjxhMjBDVSNwI1skMiZQL0RbOkFaQnRacF4mWVMzZlFAYGovWzZnTzAzLFowaktbcyZSPTJKXzhaM0dBaWMiQTdlLCRSJ1EwZTNZTzxWNSM0Xy5WVll0Vig3bW5kJ19mVEp0bzpXZFE+SEhQNSJDMjFeQTBkRCYsJFIlbltEUmQ9SEkwdDNpSz01LCU5SktHQS49ZSMjPkUzdCozPVU6STRrTjpxUl5TUWdcKFRrVkNGbDNeY2hKKjImX2smajtaW0pybyFYY2Q3RGoyLS8tSXBuaHUyIVJZJl1RWGY0b2AlI2s1I0suS1NLLHVfXDNVcS8qI1k7V3RqUD5YYk5XQ2VpJDZBWk4yUFJbXFZhRzw6Wy0wMF8iYysrdUhDKHA1MWZMYFlVTT9ITmhsL1o6Oz5ORko0MT0rIks3NilURTE+N1ohMS9HS18xMlNLTC9aW29PYl9vJDFFTkFlUVFSWEhCOFlvWVkjZi1SPl1xUTxgO2BBYU4sYGZ0alw7K1g5XkwsUV9JYVZpL2lWbXAzP2YvVj5gKDw3PiZHMWwhVDNdRFBVTC9jXypnJi44cURDdWkiXFxnYE1NLCJaXlk0RTUxc1tuKjwlUUkuXXJCcDY7LzpmIy1BckwjQWUxTFJdN0Ukc1cpKi4kI1knMUhTVHFGQyYmVVAyTDRoVWw2JUlIYFosXjwtcW91c0s1XmJFOFgyNUMoRSk7OW1rISYpV043OjkrLzVGKGJeUiRYbDUnbjgiK1VFN2NkXF1iVGhyLVtuUVowWjlHUlB0TUVlKGhVUUE7WC0vVSY0NTpfRjBqZi0tV2FfOSFZKT4zPU1mPjg3VW9wJltbciVacENJQyNJRWwiQCIqMyJqUVg8KWYxWi5Iclxec15iO0pZIStlJ1MiZzVQSVVmamVmXUNzdCxbXCJBWCklckdDRiVWZ1AlalZsTzY4KWIwWlMoTylqTyFBV0hbZExORmUqdTxGI1goIUVTJTNdbyw7NHA/NmdoP0hXNEFHUWxHQ0pqVCg5YCQ/bFo+N1oxaXBWJVpMc2BDYzNkNlNxdGNrV0FoSGdOVms+P0dfRjpnZy5yR1wxXUlUJ2RwOSFZJyViKztWLS4+KCw0LjkwU3JyTWZwO2E5Q2JVaj1iJ0tjTS9fQ205LzY7UTZqLDZaaCRlaFo+XW42aTM+RzcjPjBKR2M6N2s+Vl9VQFBwVikhQC9WKkAoZ0BLZGlpNjkyWDxEcmwtLS04VkBsJm4+OjVCKT5DQEYjPyYzQk8ib1ouYzlwaGMjaEhPSzJeN2E4R08kRUhFQmcpY3MnJyxXbVFSM2I8VjsyX0lxOWBoXGRTKlBLbUVRX0g0bS4+JUlHMm5fbV84QWpsPlhtUix0VVJvSG5xLkwiLyg3R2xASGwzKlAmUnAuU3Q7T1BoY0czQkRxaz5ibFklWHE3SVZYZkNHUktCWD9aUGFmPEROTklSVmVEZSkwTWNvOGE2QzFFNSFTLTBGV25iQyI/NyRDRlRmNHIoVCpQQnQnaDslUWU7WFc9cjdFP00/OGVjaVg2OCZoSy8zNTZLVDN1VT40JF50VDxMcUgxNWVQcyNbUU9cVk9COTU3TCdBNVx1P0dzLmFHQE1uZEtEXTQ0M0A8aVQpKGlmLlpAfj5lbmRzdHJlYW0KZW5kb2JqCjEwIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDc0MAo+PgpzdHJlYW0KR2FzSWM+QXI0TCdSb01TcGcsOmllIWNGViJNLWBuL2ZQRSw8aWVvQUY8KSUtLT9gdV8wVm5bQipOLC1mQz01QD5VbiRLNmw1MVE8YTZjZileXlwzQyxZIjtTWFYlSS4kOSNlaFNjKFQyOVI5UHBOMzNdS1VHU2BRJitBRGEjUkI+a0g4Z2pGYV00V0xrc25maFE9YU0+Y0tFNERjKGU5YStuPGdHU19taHNYazF1XjleY3RQLHFaMm1XPTJnJTxINVZVclcnIVMzVnUhUGRpaGJFZ1o8NzFkPTtaWz1rbUZCXjBTcmFsdSdWOU1gRFJFZnUkPWFUNCI6Q2ReTzdbOjZiSiRtXHVeJi1RVTx1JzBqUzJuT1ctLFRVMDRlNUtkTS5Nb008Mkh0cCpCKEBROixdWXJHNUBAYzxJWkpmKy1OTTM9JFdCRCtbQEpfRVpHMjwqTT9hZ3RIV1MyZyhURE9KSz4wX1s2VigrQUUsSzElLVM2KlJVXzNVPiwqMCFuLiE3cihGP11LJyVDYyJFLVBbO246S1BCMzByO0ksVmUyP25hcWk/KSsuN2NHMmprPVxkYlclIVBCV1MwWmYuVjxtbzJpTC8nPC0xSjRIXSJkYSlKcV01Il9KJTMoQ2RsKms+MlpfQV9TaWAoI1YzKVkvSlw/LUFOPVYoXmc2RWIua0JbNjQjXmJoRE5xUHBhQUxZcmZMXVxyajJBa1goUEhmL2NFdVsnQGRCaU04LmclbGBqNzIvbD5RWz9bImwuWDInMUgiRWV0PkBlYCRiY1RcK1w8XS5sL1twQ28sdDRaY1UkXlFJTU4qZCtGKExzW1lwM14yMjAtJVAra2pJKytbZW1BVzIzS0BWbStkTCxVTCNdWjRhSU0wSyxpbGVzJmxUaCxiVC1VXHFMaGFIW0Y4RUtpYUBGZG5qQyFNc1RROzY+RCJfQCRYZDpjPWo/WypoTWZddDk0X3FbO0g/M2hafj5lbmRzdHJlYW0KZW5kb2JqCnhyZWYKMCAxMQowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwNjEgMDAwMDAgbiAKMDAwMDAwMDEwMiAwMDAwMCBuIAowMDAwMDAwMjA5IDAwMDAwIG4gCjAwMDAwMDAzMjEgMDAwMDAgbiAKMDAwMDAwMDUyNCAwMDAwMCBuIAowMDAwMDAwNzI4IDAwMDAwIG4gCjAwMDAwMDA3OTYgMDAwMDAgbiAKMDAwMDAwMTA3NiAwMDAwMCBuIAowMDAwMDAxMTQxIDAwMDAwIG4gCjAwMDAwMDI2NTMgMDAwMDAgbiAKdHJhaWxlcgo8PAovSUQgCls8OWZkZTVhZTYwNTc5MzU5YTA4M2ViYzE5OTQ4YzhmNTc+PDlmZGU1YWU2MDU3OTM1OWEwODNlYmMxOTk0OGM4ZjU3Pl0KJSBSZXBvcnRMYWIgZ2VuZXJhdGVkIFBERiBkb2N1bWVudCAtLSBkaWdlc3QgKG9wZW5zb3VyY2UpCgovSW5mbyA3IDAgUgovUm9vdCA2IDAgUgovU2l6ZSAxMQo+PgpzdGFydHhyZWYKMzQ4NAolJUVPRgo=", "Kestrel_Infra_II_Quarterly_Report_Q2-2026.pdf": "JVBERi0xLjQKJZOMi54gUmVwb3J0TGFiIEdlbmVyYXRlZCBQREYgZG9jdW1lbnQgKG9wZW5zb3VyY2UpCjEgMCBvYmoKPDwKL0YxIDIgMCBSIC9GMiAzIDAgUgo+PgplbmRvYmoKMiAwIG9iago8PAovQmFzZUZvbnQgL0hlbHZldGljYSAvRW5jb2RpbmcgL1dpbkFuc2lFbmNvZGluZyAvTmFtZSAvRjEgL1N1YnR5cGUgL1R5cGUxIC9UeXBlIC9Gb250Cj4+CmVuZG9iagozIDAgb2JqCjw8Ci9CYXNlRm9udCAvSGVsdmV0aWNhLUJvbGQgL0VuY29kaW5nIC9XaW5BbnNpRW5jb2RpbmcgL05hbWUgL0YyIC9TdWJ0eXBlIC9UeXBlMSAvVHlwZSAvRm9udAo+PgplbmRvYmoKNCAwIG9iago8PAovQ29udGVudHMgMTEgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgMTAgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjUgMCBvYmoKPDwKL0NvbnRlbnRzIDEyIDAgUiAvTWVkaWFCb3ggWyAwIDAgNTk1LjI3NTYgODQxLjg4OTggXSAvUGFyZW50IDEwIDAgUiAvUmVzb3VyY2VzIDw8Ci9Gb250IDEgMCBSIC9Qcm9jU2V0IFsgL1BERiAvVGV4dCAvSW1hZ2VCIC9JbWFnZUMgL0ltYWdlSSBdCj4+IC9Sb3RhdGUgMCAvVHJhbnMgPDwKCj4+IAogIC9UeXBlIC9QYWdlCj4+CmVuZG9iago2IDAgb2JqCjw8Ci9Db250ZW50cyAxMyAwIFIgL01lZGlhQm94IFsgMCAwIDU5NS4yNzU2IDg0MS44ODk4IF0gL1BhcmVudCAxMCAwIFIgL1Jlc291cmNlcyA8PAovRm9udCAxIDAgUiAvUHJvY1NldCBbIC9QREYgL1RleHQgL0ltYWdlQiAvSW1hZ2VDIC9JbWFnZUkgXQo+PiAvUm90YXRlIDAgL1RyYW5zIDw8Cgo+PiAKICAvVHlwZSAvUGFnZQo+PgplbmRvYmoKNyAwIG9iago8PAovQ29udGVudHMgMTQgMCBSIC9NZWRpYUJveCBbIDAgMCA1OTUuMjc1NiA4NDEuODg5OCBdIC9QYXJlbnQgMTAgMCBSIC9SZXNvdXJjZXMgPDwKL0ZvbnQgMSAwIFIgL1Byb2NTZXQgWyAvUERGIC9UZXh0IC9JbWFnZUIgL0ltYWdlQyAvSW1hZ2VJIF0KPj4gL1JvdGF0ZSAwIC9UcmFucyA8PAoKPj4gCiAgL1R5cGUgL1BhZ2UKPj4KZW5kb2JqCjggMCBvYmoKPDwKL1BhZ2VNb2RlIC9Vc2VOb25lIC9QYWdlcyAxMCAwIFIgL1R5cGUgL0NhdGFsb2cKPj4KZW5kb2JqCjkgMCBvYmoKPDwKL0F1dGhvciAoXChhbm9ueW1vdXNcKSkgL0NyZWF0aW9uRGF0ZSAoRDoyMDI2MTAyOTEyMzcxNyswMCcwMCcpIC9DcmVhdG9yIChcKHVuc3BlY2lmaWVkXCkpIC9LZXl3b3JkcyAoKSAvTW9kRGF0ZSAoRDoyMDI2MTAyOTEyMzcxNyswMCcwMCcpIC9Qcm9kdWNlciAoUmVwb3J0TGFiIFBERiBMaWJyYXJ5IC0gXChvcGVuc291cmNlXCkpIAogIC9TdWJqZWN0IChcKHVuc3BlY2lmaWVkXCkpIC9UaXRsZSAoXChhbm9ueW1vdXNcKSkgL1RyYXBwZWQgL0ZhbHNlCj4+CmVuZG9iagoxMCAwIG9iago8PAovQ291bnQgNCAvS2lkcyBbIDQgMCBSIDUgMCBSIDYgMCBSIDcgMCBSIF0gL1R5cGUgL1BhZ2VzCj4+CmVuZG9iagoxMSAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCA1ODEKPj4Kc3RyZWFtCkdhdCRzPyNRMmQnUmU8MjMwMmIiOy9EJGpJOkghdWZbQStORGMuWi8wSVtZV1c8ODg0bURtUC1jbURiakNgaWM8VCdQdWYwN2c2RGRRYzFmcHFoImMmZUdEQUs9STNUXjs/JS9TZ01NI2dtWFhvSixGNXE5T0RrUklCMEphK05NckRgM1FBWy4mXmM9L29xblRMJDxmbERqO2pjZVtaPWhaVjAlSjhWQ0I/K2M+YixwUlAtXzw5OkhAKiZQMCZmWjc/bj4yVj8kNEtTQTEtJylyKiJMaVRVLG8tTGwmQjVZP1FGSEJGaUw+P2ZuSl5xRHAkYCJbKFxnTHFwZiYkOi9fPiZWa0hhTm88ZT9pYGdoWlg7L2I+YSQzTVZuXCh0Iz5JWkpDa246IyJtWF0qXXRtMVJWKlQ2RyRiaVxPZ3NXalI6UFptWE5Sb2UrQHRfXlBBZmtmK1lHPV0xZ081cytMQjFRMjUpWy5NMFlJUj9kO3RQbzMjIjNZR2RFLW83aiY3VmA4dTxHNSpIU2VuQkVXbSxpJTdgRDtDWkhjdGJhMllUa1FFTlclYltALUNbbiZUV0E9WW5raiUkRU0oRlM6X2FubChpXlItaWRLQkVvV0tEZDZLL0c7bi1eMWhZTUM2Li1ZSDcpX0xXKFBSPXIuT2NAVSk4WkpNSSJWZSZnQyY+WSY1Qms+LjxaaD1ZcipvWjRoKiZlRzotbzJQIVcyNFAmXz1xWFlGSG9PO3NOa2QkcUpSSXFtOTlgPiNuQ0M5a34+ZW5kc3RyZWFtCmVuZG9iagoxMiAwIG9iago8PAovRmlsdGVyIFsgL0FTQ0lJODVEZWNvZGUgL0ZsYXRlRGVjb2RlIF0gL0xlbmd0aCA2NjQKPj4Kc3RyZWFtCkdhdCR1PkFyNEwoayhSS1NCI2c8PmhhNjxrRS01K2tkVj5yLlRQYiwoLy40ZTY+JEB1ZFhNLFwmMGJNZDk7NVxYbXJILmNxOTIrW2MsdDchIT9YLjkzdC4nOGNiS1lxY29uYVlqJSNsLTZtVkUhXENyO3NcZ3RZXmYwNE5gPGQ+Mm5UZmVEVj5gaDlCK2VeXHNJNS5lPlJLXjp1YlUyYiVTSkghVmNyb08xRkx1ZFlkNW5PZFomOlE9Wj5uI1tNbTdQNWcmaCRVOUhGSDhGJ0VpUUBhYVcjcFknOjxGVkM+KShwLnQyMzEvb0w7ZzQhISRqWEpkQ1psU3VHPFkkKFlXKnBxTT08TCtxckhGXCsnPUoscDlkSWtBSi5SK1BhJ0JsYyYkLWA1Iy5RQG9RVCdLcWY0L25bJllzc2lQc05wZ2hgJFpOZHJDOzBvbTJfYCVEJThjWi8zOiZsblZiISstcS1iKE5DJmJTNTVsVCEqY2NyRD9GZnAnKSZMQFZxLSpJSSRvaCd1a29uYGQxYzUkZDpfRl0kLkkqT2RXamFpVF1YblVrUzEicUdJUyIjcE5IRWc1Y3I0ZC4+Qm1KcEN0ckV1UXFYTzslcztxTUBxXUsyWEUmKTZlOSExLz89RjVUVUw0NCE7TXUzXUkobz0qazoiOVovNmljclxtTG0+MTQoTGZcKkxiOi0rS11uIW1cOyQnYlBbUzFHQURvVllLVSZ1PzFaOS5mbjwsPEomQzpLQTZOUCZNLSZCWyIyWiNZYSstS1Zccis/dSpUQ0ctWnVkV1JocztNSSZHY1JYZ2Qlb0QwcFJxdFUvaDc6RlRFZWBsTmksJV9nYVU1YSI+aSE9QV1xTFtSUDt1ImooQzU3NS8tfj5lbmRzdHJlYW0KZW5kb2JqCjEzIDAgb2JqCjw8Ci9GaWx0ZXIgWyAvQVNDSUk4NURlY29kZSAvRmxhdGVEZWNvZGUgXSAvTGVuZ3RoIDczOQo+PgpzdHJlYW0KR2FzSWU+Qj9NbSdSb2RYSSNtWlQ5ZCwwJCphTEcyRyREKWs1JzNZVC5FM3RcNVJYOVZTXzUrIitlaHVWPXJiPXMwJk8zZWtJPktUY2FEKFkiMjc6OCprPzU9VShwcCYobnQ0Q1VYIVlRT1RgVis3OkdlWTBRKyNubTxBKSopbjpsT2heJmQqMyFDJjhBIjdPLCkocEI7O0FVaCUzKyFFS3IyakY2J2FnXWM/WGMuOydrV15eWm1zTT03Y2hsQ1k3JlMpQW1LKi4rMF4hVzZwSElTXDtzKUltZiVCYzVxaE0zMW5BLDFdVU1ZM2RDXjlUVlw7YE9baCJnXT80X09jLDxjTm8zZVJoJSssPXRsVCwjIUBNal9cOURcPW1wIklwLkFcU0ozV2AvWVFTLWdlX0ddLG9AKjNDUjVcTWdbNCtcT2ovJWQ+UiUtUSJyS2dyKkJkUTA5OzNVWVc6WWMlOi9KPXI8MF86JFNAWjM3KzdsX08+cWotanVDcEE0J2BOPk46MmpkU1JzT1VAbHI4REgjT1A8JWdmWXBySDREUDNgQmwrSFNqJm5uMy07TV80N1tnZl9gI1pMQycmIk5Db0w8OFdKJSJhIkoidEFpL150azdPWF9bVClIbD1kO1VNXUk+QkZfcElKRGRgRk8nNUQvTTk8JDRCa11yaG9aT28yZT43V0cuWkE2R0FhUm5QPTlXU29rSVdIJjEtOyNYSmIpRDxyNjE9dGRdLEo5STAycyxSJ0xiZiJYMSIhW1lFZFBzRUtQQHElS2ZQcjJmWyM6WW9NQiNDWzthXS9qREdrcXBcMFYvWGhZRmVLbTw7WHFxVzs5SWxmbkpLT3BXY2tHUWpSLF5Hblw5MyI7XldnNmEmbmliJTk5TldXXzFYJWBUWVlxSkhBcHFUUTokIz0tQyssbFw0U2AwVTwjXHQyWGojJz5tJkVvVWtXX1hxZkJrMTdYbSY3OjU+TDYvN2Z+PmVuZHN0cmVhbQplbmRvYmoKMTQgMCBvYmoKPDwKL0ZpbHRlciBbIC9BU0NJSTg1RGVjb2RlIC9GbGF0ZURlY29kZSBdIC9MZW5ndGggMTA1OQo+PgpzdHJlYW0KR2FzSWY/I1NHISY6Tl9DUzxuIT44cGZuJGlUb2ZYLDdTSScnMWZwcDxNZERoRSQ6NyNTXDtJYS5lVWpOZlIrUE4oRihYLVMyNlRvMU8iU2tVQ1Y5bGtBMCE6X1QqZikoUG5DOE1DQ3MmKGR1KDtIOTRkOHI3VmtRaEQ7Im0kPzFIPFguJGhKaEwzWzMrZ2xoUzlJZC8kVSxCKmZnN2lbSWBAK3MlUi9VLlhaPnBfdS5VLTo7X09sKE9AVFFhInJab1E4SlRIVUdJRT5iJHF1VUtmYTNqJzkyIztsLnM2ZmwwSj1EIzthKUVmUWMvPElwU2poK1cxbidAWCk7Zm1tTzZASi9MSD1GPD1NZVJqLi91LSpxZmxcRz4pV14vcl1nZDVSMDZcTFVHWEZMYVF0ZUhlImYsYHJdVWgyPzs9RldHJy1SZS9GdF4/blA+WlVFTEdsakpbZ0Mqbj40OFlLSThVKj5eYCp0QCVGKi1EPnMpKSxiMSdLMXQvLSgzT0IqXElQW1dYSyE1UXNAcUpmTzxoKChXYUApNTxeRjNwb1tUNlhIKCs8VU9pLCkzPjJDZ04uTVtsM0Y2NUUyTVUoLS8kaUtaMS0qPVUpSEM4JFpIYVg0P3NHWTI8IS06ajNHUCgicEBXSTswV0FQJ2hwa2pDak4yR0dcS0s3RyVYS0JsQlZlLE1SKGFjSUFSW2RrPGomZSJTXVFARjxeSV1MJD1wIjpQZ1s3YU9yalgtaW9hIjEickxJNl05PCREbFEkJ09yPUpvZWNAJVEtXHJQWjJNKGpOUiZtUEBydF5XV2FfZF1sdEl1V2RrdFw+LF9lSDlTW0ZqXm5gVy5iOzQ5ViNNLGclKSMxNHAyPUYuNTZWK1hLW1VXNSZDJis6MiJidCxEYyZyIiw5Pj8jTCxRQSJLVG9TRzg3KylAKlZNLEhdLUclXDdXLF1AL0BUQFlVXUhgZSJHc1QoRjxfcyRDTSdra1doP29Xa2RvQzxJMTNJWE5rUyk0dWU/NV9WblNjbTVUQ1svZUE/NF5BS1I1blJWMmJvUWQnMGFCKWEhOG1DZEoma0k4MChqSnJrPjpvSW9PP2EmOT9TTEdYKkZCTUBtdDFoP01OI09bYD4xcWU1M0lcSDYlRFRrbFVtWkguaz9JaDZAVGFdZmcjbkpJc2MiZWVlQzBSLmlnQSNWTmNoQGY6KWdSaDZEWmFbUipYPWxtYyVZY2RxK2ZwXV05RzlLMVMvLWBQSyNVXz9OI1RBYV5UTjRkKV9SO2xqUC1DV2BDXTssOmgidEEzcmpvUzZdLS85SXAiJCFYZmV0OT4lY0ZESjwoNVBCRSRHSE9oajVxQCwjOjQ8Q3JJZU5EMERNLUpePFAsclpyK0xhR1syN29LT1hbO1taIz9kYDBRTn4+ZW5kc3RyZWFtCmVuZG9iagp4cmVmCjAgMTUKMDAwMDAwMDAwMCA2NTUzNSBmIAowMDAwMDAwMDYxIDAwMDAwIG4gCjAwMDAwMDAxMDIgMDAwMDAgbiAKMDAwMDAwMDIwOSAwMDAwMCBuIAowMDAwMDAwMzIxIDAwMDAwIG4gCjAwMDAwMDA1MjYgMDAwMDAgbiAKMDAwMDAwMDczMSAwMDAwMCBuIAowMDAwMDAwOTM2IDAwMDAwIG4gCjAwMDAwMDExNDEgMDAwMDAgbiAKMDAwMDAwMTIxMCAwMDAwMCBuIAowMDAwMDAxNDkwIDAwMDAwIG4gCjAwMDAwMDE1NjggMDAwMDAgbiAKMDAwMDAwMjI0MCAwMDAwMCBuIAowMDAwMDAyOTk1IDAwMDAwIG4gCjAwMDAwMDM4MjUgMDAwMDAgbiAKdHJhaWxlcgo8PAovSUQgCls8NDczOTZmOWMzOWI4ODQ1NzRhNGY3Yzc2ZDhlOGI3ZTQ+PDQ3Mzk2ZjljMzliODg0NTc0YTRmN2M3NmQ4ZThiN2U0Pl0KJSBSZXBvcnRMYWIgZ2VuZXJhdGVkIFBERiBkb2N1bWVudCAtLSBkaWdlc3QgKG9wZW5zb3VyY2UpCgovSW5mbyA5IDAgUgovUm9vdCA4IDAgUgovU2l6ZSAxNQo+PgpzdGFydHhyZWYKNDk3NgolJUVPRgo="};
+const SAMPLE_INFO = {
+  "Northbridge_IV_Capital_Account_Statement_H1-2026.pdf":"Clean LP statement. Every field should extract and verify.",
+  "Northbridge_IV_Portfolio_Summary_Q2-2026.pdf":"Five companies, including undisclosed EBITDA and a newly acquired company with no financials.",
+  "Kestrel_Infra_II_Quarterly_Report_Q2-2026.pdf":"Combined report with a prior-quarter NAV decoy, no unfunded figure and a fair value under review."
+};
+
+/* ================= utilities ================= */
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const norm=s=>String(s??"").toLowerCase().replace(/[\u2018\u2019\u2032]/g,"'").replace(/[\u2013\u2014]/g,"-").replace(/\s+/g," ").trim();
+const nowIso=()=>new Date().toISOString().replace("T"," ").slice(0,19);
+const ic=(id,extra="")=>`<svg class="i" ${extra}><use href="#i-${id}"/></svg>`;
+function toast(m){const t=$("#toast");t.textContent=m;t.classList.add("on");clearTimeout(toast.t);toast.t=setTimeout(()=>t.classList.remove("on"),2800)}
+const mem={};
+const store={
+  get(k,d){try{const v=localStorage.getItem("sm:"+k);return v==null?d:JSON.parse(v)}catch{return k in mem?mem[k]:d}},
+  set(k,v){try{localStorage.setItem("sm:"+k,JSON.stringify(v))}catch{mem[k]=v}},
+  del(k){try{localStorage.removeItem("sm:"+k)}catch{delete mem[k]}}
+};
+
+/* ================= auth (demo, browser-only) ================= */
+const DEMO_USER={name:"Demo Analyst",email:"demo@sourcemark.app",org:"Clustox demo"};
+async function hashPw(pw,email){
+  const data=new TextEncoder().encode("sourcemark:"+email.toLowerCase()+":"+pw);
+  try{const b=await crypto.subtle.digest("SHA-256",data);return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,"0")).join("")}
+  catch{let h=0;for(const c of data)h=(h*31+c)|0;return "x"+h}
+}
+const Auth={
+  users(){return store.get("users",{})},
+  session(){const s=store.get("session",null);if(!s)return null;if(s.exp&&s.exp<Date.now()){store.del("session");return null}return s},
+  async signUp(name,email,pw){
+    const u=this.users();const k=email.toLowerCase();
+    if(u[k]) throw new Error("An account with this email already exists. Sign in instead.");
+    u[k]={name,email:k,hash:await hashPw(pw,k),created:Date.now()};store.set("users",u);
+    return this.start({name,email:k},true);
+  },
+  async signIn(email,pw,remember){
+    const u=this.users()[email.toLowerCase()];
+    if(!u||u.hash!==await hashPw(pw,email)) throw new Error("Email or password is incorrect.");
+    return this.start({name:u.name,email:u.email},remember);
+  },
+  start(user,remember){const s={...user,exp:Date.now()+(remember?7:1)*864e5};store.set("session",s);return s},
+  signOut(){store.del("session")}
+};
+function pwStrength(p){let s=0;if(p.length>=8)s++;if(/[A-Z]/.test(p)&&/[a-z]/.test(p))s++;if(/\d/.test(p))s++;if(/[^A-Za-z0-9]/.test(p)&&p.length>=10)s++;return p?Math.max(1,s):0}
+const validEmail=e=>/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
+
+function authView(kind){
+  const c=$("#authCard");
+  const pwField=(id,label,auto,extra="")=>`<div class="fld" id="f-${id}"><div class="row"><label for="${id}">${label}</label>${extra}</div>
+    <div class="pw"><input id="${id}" type="password" autocomplete="${auto}" required><button type="button" data-tog="${id}">Show</button></div><div class="msg"></div></div>`;
+  const demoBtn=`<button type="button" class="btn block" id="demoBtn">Continue with demo account</button><div class="divider">or with email</div>`;
+  if(kind==="signin"){
+    c.innerHTML=`<h1>Welcome back</h1><p class="sub">Sign in to review your fund documents.</p>
+      <form class="form" id="authForm" novalidate>
+        <div id="aMsg"></div>${demoBtn}
+        <div class="fld" id="f-email"><label for="email">Work email</label><input id="email" type="email" autocomplete="email" required><div class="msg"></div></div>
+        ${pwField("password","Password","current-password",'<button type="button" class="linkb" data-route="reset" style="font-size:13px">Forgot password?</button>')}
+        <label class="check"><input type="checkbox" id="remember" checked> Keep me signed in for 7 days</label>
+        <button class="btn primary block lg" type="submit">Sign in</button>
+      </form>
+      <p class="switch">New here? <button class="linkb" data-route="signup">Create an account</button></p>
+      <p class="demo-note">Demo sign-in: accounts are stored only in this browser.</p>`;
+  } else if(kind==="signup"){
+    c.innerHTML=`<h1>Create your account</h1><p class="sub">Start reviewing fund reports in under a minute.</p>
+      <form class="form" id="authForm" novalidate>
+        <div id="aMsg"></div>${demoBtn}
+        <div class="fld" id="f-name"><label for="name">Full name</label><input id="name" autocomplete="name" required><div class="msg"></div></div>
+        <div class="fld" id="f-email"><label for="email">Work email</label><input id="email" type="email" autocomplete="email" required><div class="msg"></div></div>
+        ${pwField("password","Password","new-password")}
+        <div class="meter" id="meter" data-s="0" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+        <p class="hint" id="pwHint" style="font-size:12.5px;color:var(--muted);margin-top:-8px">At least 8 characters, with a number and mixed case.</p>
+        <label class="check"><input type="checkbox" id="terms"> I understand this is a proof of concept using synthetic data.</label>
+        <button class="btn primary block lg" type="submit">Create account</button>
+      </form>
+      <p class="switch">Already have an account? <button class="linkb" data-route="signin">Sign in</button></p>`;
+  } else {
+    c.innerHTML=`<h1>Reset your password</h1><p class="sub">Enter your work email and we’ll send a reset link.</p>
+      <form class="form" id="authForm" novalidate>
+        <div id="aMsg"></div>
+        <div class="fld" id="f-email"><label for="email">Work email</label><input id="email" type="email" autocomplete="email" required><div class="msg"></div></div>
+        <button class="btn primary block lg" type="submit">Send reset link</button>
+      </form>
+      <p class="switch"><button class="linkb" data-route="signin">Back to sign in</button></p>`;
+  }
+  c.querySelectorAll("[data-route]").forEach(b=>b.onclick=()=>go(b.dataset.route));
+  c.querySelectorAll("[data-tog]").forEach(b=>b.onclick=()=>{const i=$("#"+b.dataset.tog);const s=i.type==="password";i.type=s?"text":"password";b.textContent=s?"Hide":"Show"});
+  const demo=$("#demoBtn"); if(demo) demo.onclick=()=>{Auth.start(DEMO_USER,true);afterAuth()};
+  const pw=$("#password"), meter=$("#meter");
+  if(pw&&meter) pw.addEventListener("input",()=>meter.dataset.s=pwStrength(pw.value));
+  const setErr=(id,m)=>{const f=$("#f-"+id);if(!f)return;f.classList.toggle("err",!!m);f.querySelector(".msg").textContent=m||""};
+  const msg=(t,k="bad")=>$("#aMsg").innerHTML=t?`<div class="alert ${k}">${esc(t)}</div>`:"";
+  $("#authForm").onsubmit=async e=>{
+    e.preventDefault(); msg("");
+    const email=($("#email").value||"").trim();
+    let bad=false;
+    setErr("email",validEmail(email)?"":"Enter a valid email address."); if(!validEmail(email)) bad=true;
+    if(kind==="reset"){ if(bad) return; msg(`If an account exists for ${email}, a reset link is on its way. (Demo: no email is sent.)`,"ok"); return; }
+    const p=pw.value;
+    if(kind==="signup"){
+      const name=$("#name").value.trim(); setErr("name",name?"":"Enter your name."); if(!name) bad=true;
+      const st=pwStrength(p); setErr("password",st>=3&&p.length>=8?"":"Use 8+ characters with a number and mixed case."); if(!(st>=3&&p.length>=8)) bad=true;
+      if(!$("#terms").checked){ msg("Please confirm you understand this is a proof of concept."); bad=true; }
+      if(bad) return;
+      try{ await Auth.signUp(name,email,p); toast(`Welcome, ${name.split(" ")[0]}`); afterAuth(); }catch(er){ msg(er.message); }
+    } else {
+      setErr("password",p?"":"Enter your password."); if(!p) bad=true; if(bad) return;
+      try{ await Auth.signIn(email,p,$("#remember").checked); afterAuth(); }catch(er){ msg(er.message); setErr("password"," "); }
+    }
+  };
+  setTimeout(()=>{const f=c.querySelector("input:not([type=checkbox])"); if(f&&window.innerWidth>900) f.focus()},30);
+}
+function afterAuth(){ const to=S.pending||"app"; S.pending=null; go(to); }
+
+/* ================= router ================= */
+const APP_ROUTES=["app","exports","activity"], AUTH_ROUTES=["signin","signup","reset"];
+function go(r){ if(location.hash.slice(1)===r) route(); else location.hash=r; }
+function route(){
+  let r=location.hash.slice(1)||"home";
+  if(![...APP_ROUTES,...AUTH_ROUTES,"home"].includes(r)) r="home";
+  const sess=Auth.session();
+  if(APP_ROUTES.includes(r)&&!sess){ S.pending=r; history.replaceState(null,"","#signin"); r="signin"; }
+  if((r==="signin"||r==="signup")&&sess){ history.replaceState(null,"","#app"); r="app"; }
+  document.querySelectorAll(".view").forEach(v=>v.classList.remove("on"));
+  if(r==="home"){ $("#v-home").classList.add("on"); document.title="Sourcemark — fund reporting, traced to the source"; }
+  else if(AUTH_ROUTES.includes(r)){ $("#v-auth").classList.add("on"); authView(r); document.title={signin:"Sign in",signup:"Create account",reset:"Reset password"}[r]+" — Sourcemark"; }
+  else {
+    $("#v-app").classList.add("on"); S.route=r;
+    const u=Auth.session(); $("#avatar").textContent=(u.name||"?").split(/\s+/).map(x=>x[0]).slice(0,2).join("").toUpperCase(); $("#mName").textContent=u.name; $("#mEmail").textContent=u.email;
+    ["app","exports","activity"].forEach(p=>$("#p-"+p).hidden=p!==r);
+    document.querySelectorAll(".atabs button").forEach(b=>b.setAttribute("aria-current",b.dataset.go===r?"page":"false"));
+    document.title={app:"Review",exports:"Exports",activity:"Activity"}[r]+" — Sourcemark";
+    if(!S.engineStarted){S.engineStarted=true;detectEngine()}
+    renderApp();
+  }
+  window.scrollTo(0,0);
+}
+window.addEventListener("hashchange",route);
+
+/* landing interactions */
+document.querySelectorAll("[data-scroll]").forEach(b=>b.addEventListener("click",()=>document.getElementById(b.dataset.scroll).scrollIntoView({behavior:"smooth"})));
+window.addEventListener("scroll",()=>$("#lnav").classList.toggle("scrolled",scrollY>8),{passive:true});
+
+/* app chrome */
+document.querySelectorAll("[data-go]").forEach(b=>b.onclick=()=>go(b.dataset.go));
+$("#avatar").onclick=e=>{e.stopPropagation();const m=$("#menu");const on=!m.classList.contains("on");m.classList.toggle("on",on);$("#avatar").setAttribute("aria-expanded",on)};
+document.addEventListener("click",e=>{if(!e.target.closest("#menu"))$("#menu").classList.remove("on")});
+$("#mOut").onclick=()=>{Auth.signOut();$("#menu").classList.remove("on");toast("Signed out");go("home")};
+$("#mAbout").onclick=()=>{$("#menu").classList.remove("on");$("#dAbout").showModal()};
+$("#aboutClose").onclick=()=>$("#dAbout").close();
+
+/* ================= extraction engine ================= */
+const S={docs:[],selId:null,engine:"pending",sample:null,downloads:null,audit:[],exports:[],filter:"all",editing:null,viewer:{docId:null,page:1,key:null,zoom:1}};
+let uid=0;
+function log(doc,action,detail){S.audit.push({time:nowIso(),user:(Auth.session()||{}).email||"",document:doc?doc.name:"",action,detail:detail||""})}
+async function detectEngine(){
+  try{
+    if(window.claude&&claude.use){
+      const [s,dl]=await Promise.all([claude.use("sample"),claude.use("downloads")]);
+      S.downloads=dl; if(s){S.sample=s;S.engine="artifact";renderEngine();return}
+    }
+  }catch{}
+  try{ const r=await fetch("/api/health",{cache:"no-store"}); if(r.ok){const j=await r.json(); if(j&&j.ai){S.engine="api";S.provider=j.provider||"";S.model=j.model||"";renderEngine();return}} }catch{}
+  S.engine="rules"; renderEngine();
+}
+function aiName(){return S.engine==="api"?({openai:"OpenAI",anthropic:"Claude"}[S.provider]||"AI"):"Claude"}
+function renderEngine(){
+  const e=$("#engine");
+  const m={pending:["","Connecting","Checking which extraction engine is available"],artifact:["ai","Claude extraction","Claude classifies and extracts each document. The first run asks you to allow Claude for this page."],api:["ai",aiName()+" extraction",aiName()+" classifies and extracts each document through the app’s server."],rules:["rules","Rule-based mode","AI extraction isn’t available here, so a pattern-matching extractor tuned to standard layouts is used."]}[S.engine];
+  e.className="engine "+m[0]; e.title=m[2]; e.querySelector("span").textContent=m[1];
+  if(S.route==="app") renderCenter();
+}
+
+const FUND_FIELDS=[["fund_name","Fund name"],["reporting_date","Reporting date"],["total_commitment","Total commitment"],["capital_contributions","Capital contributions"],["distributions","Distributions"],["unfunded_commitment","Unfunded commitment"],["nav","Capital account balance / NAV"]];
+const LP_ONLY=new Set(["total_commitment","capital_contributions","distributions","unfunded_commitment","nav"]);
+const PORT_FIELDS=[["investment_cost","Investment cost"],["fair_value","Fair value"],["ownership_pct","Ownership"],["revenue","Revenue"],["ebitda","EBITDA"],["net_debt","Net debt"]];
+const TYPE_LABEL={capital_account_statement:"Capital account statement",portfolio_summary:"Portfolio summary",combined_report:"Quarterly report",other:"Unrecognised document"};
+
+function buildPrompt(d){
+  const pagesTxt=d.pages.map(p=>`=== PAGE ${p.n} ===\n${p.text}`).join("\n\n").slice(0,120000);
+  const F='{"value": string|null, "page": number|null, "quote": string|null, "confidence": "high"|"medium"|"low", "note": string|null}';
+  return `You are a private equity fund-reporting analyst. Read the document text below (page-separated) and return ONE JSON object, nothing else.
+
+Tasks:
+1. Classify the document: "capital_account_statement" (an LP's commitment / contributions / distributions / capital account), "portfolio_summary" (table of portfolio companies with cost, fair value, ownership), "combined_report" (contains both), or "other".
+2. Extract the fields below. Each field uses this shape: ${F}
+
+Strict rules:
+- Copy "value" EXACTLY as printed in the document (same digits, commas, brackets, % sign, words). Do not convert units, compute, round or reformat.
+- NEVER invent or calculate a value. If a field is not explicitly stated, set value null, page null, quote null, and explain in "note" (e.g. "Not stated; could be derived as X - Y" or "Not applicable to this document type").
+- "page" is the page number where the value is printed. "quote" is a short exact snippet (max 12 words) copied from that page that contains the value or its label.
+- Use confidence "low" and a note when the value is ambiguous (several candidate figures, prior-period figures, values marked under review or not disclosed). Prefer the figure for the document's reporting date.
+- For "nav" use the LP's closing capital account balance or investor NAV at the reporting date, NOT fund-level NAV and NOT a prior-period figure.
+- For "distributions" and "capital_contributions" use cumulative to-date amounts for the LP.
+- If a portfolio cell says "n.d.", "-", "Under review" or similar, value null with a note quoting what the document says, page set to where it appears.
+- Portfolio "company": value is the company name.
+
+Return exactly:
+{"document_type": "...", "type_confidence": 0.0-1.0, "type_reason": "one sentence citing what in the document shows the type",
+ "currency": "e.g. EUR" or null, "units": "e.g. EUR" or "EUR millions (portfolio)" or null,
+ "fund": {"fund_name": F, "reporting_date": F, "total_commitment": F, "capital_contributions": F, "distributions": F, "unfunded_commitment": F, "nav": F},
+ "portfolio": [{"company": F, "investment_cost": F, "fair_value": F, "ownership_pct": F, "revenue": F, "ebitda": F, "net_debt": F}]}
+Use [] for portfolio if the document has no portfolio table. Exclude total rows.
+
+DOCUMENT: ${d.name}
+
+${pagesTxt}`;
+}
+async function aiExtract(d){
+  const prompt=buildPrompt(d);
+  if(S.engine==="artifact") return S.sample.json(prompt,{modelTier:"default"});
+  const r=await fetch("/api/extract",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({prompt})});
+  const j=await r.json().catch(()=>({}));
+  if(!r.ok) throw {code:r.status===501?"not_configured":"api_error",message:j.error||("HTTP "+r.status)};
+  return j.result;
+}
+
+/* intake */
+const dz=$("#dz"),fileIn=$("#fileIn");
+dz.addEventListener("keydown",e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();fileIn.click()}});
+["dragenter","dragover"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.add("over")}));
+["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("over")}));
+dz.addEventListener("drop",e=>addFiles([...e.dataTransfer.files]));
+fileIn.addEventListener("change",()=>{addFiles([...fileIn.files]);fileIn.value=""});
+$("#loadSamples").onclick=loadSamples;
+function loadSamples(){
+  const have=new Set(S.docs.map(d=>d.name));
+  const list=Object.entries(SAMPLE_PDFS).filter(([n])=>!have.has(n));
+  if(!list.length){toast("Sample reports are already loaded");return}
+  list.forEach(([name,b64])=>{const bin=atob(b64);const u=new Uint8Array(bin.length);for(let i=0;i<bin.length;i++)u[i]=bin.charCodeAt(i);addDoc(name,u,true)});
+}
+async function addFiles(files){
+  for(const f of files){
+    if(!/\.pdf$/i.test(f.name)&&f.type!=="application/pdf"){toast(`${f.name} isn’t a PDF`);continue}
+    if(f.size>25*1024*1024){toast(`${f.name} is over 25 MB`);continue}
+    addDoc(f.name,new Uint8Array(await f.arrayBuffer()),false);
+  }
+}
+function addDoc(name,bytes,sample){
+  const d={id:++uid,name,bytes,sample,status:"queued",step:0,pages:[],pdf:null,fund:{},portfolio:[],type:null,method:null};
+  S.docs.push(d); log(d,"Uploaded",sample?"Synthetic sample":"User upload");
+  if(!S.selId) S.selId=d.id;
+  renderApp(); queue();
+}
+let busy=false;
+async function queue(){
+  if(busy)return; busy=true;
+  while(true){
+    if(S.engine==="pending"){await new Promise(r=>setTimeout(r,300));continue}
+    const d=S.docs.find(x=>x.status==="queued"); if(!d)break;
+    await processDoc(d);
+  }
+  busy=false;
+}
+async function readPdf(d){
+  const pdf=await pdfjsLib.getDocument({data:d.bytes.slice(),isEvalSupported:false}).promise;
+  d.pdf=pdf; d.pages=[];
+  for(let p=1;p<=pdf.numPages;p++){
+    const page=await pdf.getPage(p); const tc=await page.getTextContent();
+    const items=tc.items.filter(i=>i.str&&i.str.trim()).map(i=>({str:i.str,x:i.transform[4],y:i.transform[5],w:i.width,t:i.transform}));
+    const rows=[];
+    items.sort((a,b)=>b.y-a.y||a.x-b.x).forEach(it=>{let r=rows.find(r=>Math.abs(r.y-it.y)<2.5);if(!r){r={y:it.y,items:[]};rows.push(r)}r.items.push(it)});
+    rows.sort((a,b)=>b.y-a.y); rows.forEach(r=>r.items.sort((a,b)=>a.x-b.x));
+    const lines=rows.map(r=>r.items.map(i=>i.str.trim()).join("  "));
+    rows.forEach((r,li)=>r.items.forEach(it=>it.line=li));
+    d.pages.push({n:p,items,lines,rows,text:lines.join("\n")});
+  }
+}
+async function processDoc(d){
+  const step=n=>{d.step=n;renderDocs();if(S.selId===d.id)renderCenter()};
+  try{
+    d.status="working"; step(1);
+    await readPdf(d);
+    if(d.pages.reduce((a,p)=>a+p.text.length,0)<40){d.status="error";d.error="No readable text was found. This looks like a scanned PDF, which this proof of concept doesn’t cover yet.";log(d,"Failed",d.error);renderApp();return}
+    step(2);
+    let res=null;
+    if(S.engine==="artifact"||S.engine==="api"){
+      try{ res=await aiExtract(d); d.method="ai"; d.aiName=aiName(); }
+      catch(e){
+        if(e&&(e.code==="not_granted"||e.code==="not_configured")){S.engine="rules";renderEngine();toast("AI extraction isn’t available, switched to rule-based mode")}
+        else toast(`AI extraction failed (${e&&e.code||"error"}), used rule-based fallback`);
+        res=null;
+      }
+      if(res&&(typeof res!=="object"||!res.fund)){toast("AI returned an unexpected format, used rule-based fallback");res=null}
+    }
+    if(!res){res=ruleExtract(d);d.method="rules"}
+    step(3); await new Promise(r=>setTimeout(r,250));
+    applyResult(d,res);
+    d.status="ready"; d.step=4;
+    log(d,"Processed",`${TYPE_LABEL[d.type]} · ${d.method==="ai"?d.aiName:"rule-based"}`);
+  }catch(e){ d.status="error"; d.error=`This PDF couldn’t be read (${e&&e.message||e}).`; log(d,"Failed",d.error); }
+  renderApp();
+}
+
+/* rule-based fallback */
+function ruleExtract(d){
+  const lines=[]; d.pages.forEach(p=>p.lines.forEach(l=>lines.push({p:p.n,l})));
+  const all=d.pages.map(p=>p.text).join("\n");
+  const NUM="\\(?[0-9][0-9,]*(?:\\.[0-9]+)?\\)?";
+  const F=(value,page,quote,confidence="medium",note=null)=>({value,page,quote,confidence,note});
+  const miss=note=>F(null,null,null,"high",note);
+  const find=re=>{for(const {p,l} of lines){const m=l.match(re);if(m)return F(m[m.length-1].trim(),p,l.slice(0,90))}return null};
+  const fund={};
+  const nl=lines.find(x=>/(L\.P\.|SCSp|Fund\s+[IVX]+|Partners\s+[IVX]+)/.test(x.l));
+  fund.fund_name=nl?F(nl.l.trim(),nl.p,nl.l):miss("No fund name pattern found");
+  fund.reporting_date=find(/(?:as at|as of|period ended|quarter ended|half-year ended|to)\s+(\d{1,2}\s+[A-Z][a-z]+\s+\d{4})/i)||miss("No reporting date pattern found");
+  fund.total_commitment=find(new RegExp("^(?:total\\s+)?commitment\\s+("+NUM+")$","i"))||miss("Not stated");
+  fund.capital_contributions=find(new RegExp("(?:capital contributions to date|paid-in capital)\\s+("+NUM+")","i"))||miss("Not stated");
+  fund.distributions=find(new RegExp("(?:distributions to date|cumulative distributions)\\s+("+NUM+")","i"))||miss("Not stated");
+  fund.unfunded_commitment=find(new RegExp("unfunded commitment\\s+("+NUM+")","i"))||miss("Not stated in the document");
+  fund.nav=find(new RegExp("(?:closing capital account balance|net asset value at).*?(?:19|20)\\d{2}\\s+("+NUM+")$","i"))||miss("Not stated");
+  const portfolio=[]; const CELL="(\\(?[0-9][0-9,.]*%?\\)?|n\\.d\\.|-|Under review)";
+  const rowRe=new RegExp("^([A-Z][A-Za-z&.,' ]+?)\\s{2}"+Array(6).fill(CELL).join("\\s+")+"(?:\\s+"+CELL+")?$");
+  for(const {p,l} of lines){
+    const m=l.match(rowRe); if(!m||/^total/i.test(m[1]))continue;
+    const cells=m.slice(2).filter(x=>x!==undefined); if(cells.length<6)continue;
+    const row={company:F(m[1].trim(),p,l.slice(0,60),"high")};
+    PORT_FIELDS.forEach(([k],i)=>{const v=cells[i];row[k]=(v===undefined||/^(n\.d\.|-|Under review)$/i.test(v))?F(null,p,l.slice(0,60),"high",v?`Document shows “${v}”`:"Not stated"):F(v,p,l.slice(0,60))});
+    portfolio.push(row);
+  }
+  const hasLP=["total_commitment","capital_contributions","nav"].some(k=>fund[k].value);
+  const type=hasLP&&portfolio.length?"combined_report":hasLP?"capital_account_statement":portfolio.length?"portfolio_summary":"other";
+  const cur=(all.match(/\b(EUR|USD|GBP|CHF)\b/)||[])[1]||null;
+  return {document_type:type,type_confidence:.6,type_reason:"Inferred from which statement sections were found by pattern matching.",currency:cur,units:cur?(cur+(/millions/i.test(all)&&portfolio.length?" (portfolio in millions)":"")):null,fund,portfolio};
+}
+
+/* normalise + verify */
+function verify(d,f){
+  if(f.value==null)return;
+  const v=norm(f.value);
+  const p=f.page&&d.pages[f.page-1];
+  if(p&&norm(p.text).includes(v)){f.verified=true;return}
+  const o=d.pages.find(x=>norm(x.text).includes(v));
+  if(o){f.note=(f.note?f.note+" ":"")+`Cited page ${f.page??"?"} corrected to ${o.n}.`;f.page=o.n;f.verified=true;return}
+  f.verified=false;
+}
+function mkField(raw){
+  const r=raw&&typeof raw==="object"?raw:{value:raw??null};
+  let value=r.value; if(value!=null)value=String(value).trim(); if(value==="")value=null;
+  return {value,original:value,page:Number.isFinite(+r.page)&&+r.page>0?+r.page:null,quote:r.quote||null,confidence:["high","medium","low"].includes(r.confidence)?r.confidence:"medium",note:r.note||null,verified:null,review:"pending",edited:false,na:false};
+}
+function applyResult(d,res){
+  d.type=TYPE_LABEL[res.document_type]?res.document_type:"other";
+  d.typeConf=Math.max(0,Math.min(1,+res.type_confidence||0)); d.typeReason=res.type_reason||"";
+  d.currency=res.currency||null; d.units=res.units||null;
+  d.fund={};
+  FUND_FIELDS.forEach(([k])=>{const f=mkField(res.fund&&res.fund[k]);verify(d,f);if(d.type==="portfolio_summary"&&LP_ONLY.has(k)&&f.value==null){f.na=true;f.review="na"}d.fund[k]=f});
+  d.portfolio=(Array.isArray(res.portfolio)?res.portfolio:[]).map(row=>{const r={company:mkField(row&&row.company),review:"pending"};verify(d,r.company);PORT_FIELDS.forEach(([k])=>{r[k]=mkField(row&&row[k]);verify(d,r[k])});return r});
+}
+function flagOf(f){if(f.na)return "na";if(f.value==null)return "missing";if(f.verified===false||f.confidence==="low")return "uncertain";return "ok"}
+function rowFlagged(r){return PORT_FIELDS.some(([k])=>flagOf(r[k])!=="ok")}
+function counts(d){
+  let ok=0,miss=0,unc=0,appr=0,total=0;
+  const visit=(f,a)=>{const fl=flagOf(f);if(fl==="na")return;total++;if(fl==="ok")ok++;if(fl==="missing")miss++;if(fl==="uncertain")unc++;if(a)appr++};
+  FUND_FIELDS.forEach(([k])=>{const f=d.fund[k];if(f)visit(f,f.review==="approved")});
+  d.portfolio.forEach(r=>PORT_FIELDS.forEach(([k])=>visit(r[k],r.review==="approved")));
+  return {ok,miss,unc,appr,total,pend:total-appr};
+}
+function nullLabel(f){const n=f.note||"";if(/n\.d|not disclosed/i.test(n))return "n.d.";if(/under review/i.test(n))return "Under review";if(/[“"]-[”"]|held at cost|not (yet )?reported/i.test(n))return "Not reported";return "Missing"}
+function statusChip(f){
+  const fl=flagOf(f);
+  if(fl==="na")return '<span class="chip mute">Not in this document type</span>';
+  if(fl==="missing")return '<span class="chip bad">Missing</span>';
+  if(f.verified===false)return '<span class="chip warn">Not found on page</span>';
+  if(fl==="uncertain")return '<span class="chip warn">Uncertain</span>';
+  return '<span class="chip ok">Verified</span>';
+}
+
+/* ================= rendering: app ================= */
+function renderApp(){ if(S.route==="app"){renderDocs();renderCenter()} else if(S.route==="exports") renderExports(); else if(S.route==="activity") renderActivity(); }
+function renderDocs(){
+  $("#docCount").textContent=S.docs.length;
+  $("#dlist").innerHTML=S.docs.map(d=>{
+    let meta="",pr="";
+    if(d.status==="queued") meta='<span class="chip mute">Queued</span>';
+    else if(d.status==="working") meta=`<span class="chip brand">${["","Reading","Extracting","Verifying"][d.step]||"Working"}…</span>`;
+    else if(d.status==="error") meta='<span class="chip bad">Couldn’t process</span>';
+    else{const c=counts(d);const fl=c.miss+c.unc;meta=`<span class="chip mute">${esc(TYPE_LABEL[d.type])}</span>${fl?`<span class="chip warn">${fl} flagged</span>`:""}`;pr=`<div class="prog" title="${c.appr} of ${c.total} reviewed"><i style="width:${c.total?Math.round(c.appr/c.total*100):0}%"></i></div>`}
+    return `<li class="ditem ${d.id===S.selId?"sel":""}" data-id="${d.id}" tabindex="0" role="button" aria-pressed="${d.id===S.selId}"><div class="nm">${ic("file")}<span>${esc(d.name.replace(/\.pdf$/i,"").replace(/_/g," "))}</span></div><div class="meta">${meta}</div>${pr}</li>`;
+  }).join("");
+  $("#dlist").querySelectorAll(".ditem").forEach(el=>{const sel=()=>{S.selId=+el.dataset.id;S.editing=null;renderDocs();renderCenter()};el.onclick=sel;el.onkeydown=e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();sel()}}});
+}
+function renderCenter(){
+  const c=$("#center"); const d=S.docs.find(x=>x.id===S.selId);
+  if(!d){
+    c.innerHTML=`<div class="panel onb">
+      <h2>Turn fund reports into reviewed, source-linked data</h2>
+      <p>Upload a capital account statement, portfolio summary or quarterly report. Each value is extracted with its page reference, checked against the document and held for your approval before export.</p>
+      <div class="two"><button class="btn primary lg" id="oSamples">Load 3 sample reports</button><button class="btn lg" id="oUpload">${ic("up")}Upload your own PDF</button></div>
+      <div class="samples"><h3>What the samples test</h3><ul>${Object.entries(SAMPLE_INFO).map(([n,t])=>`<li>${ic("file",'style="margin-top:3px;color:var(--brand-ink)"')}<div><b>${esc(n.replace(/\.pdf$/,"").replace(/_/g," "))}</b><span>${esc(t)}</span></div></li>`).join("")}</ul></div>
+    </div>`;
+    $("#oSamples").onclick=loadSamples; $("#oUpload").onclick=()=>fileIn.click(); renderViewerEmpty(); return;
+  }
+  if(d.status==="queued"||d.status==="working"){
+    const st=d.status==="queued"?0:d.step;
+    const ai=S.engine==="artifact"||S.engine==="api";
+    const steps=[["Read the document","Text and page layout extracted in your browser"],[ai?"Classify and extract with "+aiName():"Classify and extract (rule-based)",ai?(S.engine==="artifact"?"Usually 20–60 seconds. Allow Claude if prompted.":"Usually 20–60 seconds."):"Pattern matching against standard layouts"],["Verify against source pages","Each value checked on its cited page"],["Ready for review",""]];
+    c.innerHTML=`<div class="panel"><div class="dhead"><h2>${esc(d.name)}</h2></div><div class="process" style="border-top:1px solid var(--line-2)">
+      <h3>${d.status==="queued"?"Waiting for the previous document":"Processing"}</h3>
+      <ol class="tl">${steps.map((s,i)=>{const n=i+1;const cls=n<st?"done":n===st?"now":"";return `<li class="${cls}"><span class="dot">${n<st?ic("check",'style="width:13px;height:13px;stroke-width:2.6"'):""}</span><div>${esc(s[0])}${s[1]?`<small>${esc(s[1])}</small>`:""}</div></li>`}).join("")}</ol></div></div>`;
+    return;
+  }
+  if(d.status==="error"){
+    c.innerHTML=`<div class="panel"><div class="dhead"><h2>${esc(d.name)}</h2><p class="why">${esc(d.error)}</p><div style="margin-top:16px"><button class="btn" id="rm">${ic("trash")}Remove</button></div></div></div>`;
+    $("#rm").onclick=()=>removeDoc(d); return;
+  }
+  const k=counts(d); const pct=k.total?Math.round(k.appr/k.total*100):0;
+  const F=S.filter;
+  const showF=f=>F==="all"||(F==="attn"&&f.review!=="approved"&&f.review!=="na"&&flagOf(f)!=="ok")||(F==="appr"&&f.review==="approved")||(F==="todo"&&f.review==="pending");
+  const showR=r=>F==="all"||(F==="attn"&&r.review!=="approved"&&rowFlagged(r))||(F==="appr"&&r.review==="approved")||(F==="todo"&&r.review==="pending");
+  let h=`<div class="panel"><div class="dhead">
+    <div class="top"><h2>${esc(d.name)}</h2><div class="acts"><button class="btn sm ghost" id="rerun" title="Run extraction again">${ic("refresh")}Re-run</button><button class="btn sm ghost" id="rm" title="Remove document">${ic("trash")}Remove</button></div></div>
+    <div class="meta"><span class="chip brand">${esc(TYPE_LABEL[d.type])}</span><span class="chip mute">${Math.round(d.typeConf*100)}% confidence</span>${d.method==="ai"?`<span class="chip ok">Extracted by ${esc(d.aiName)}</span>`:'<span class="chip warn">Rule-based fallback</span>'}${d.units?`<span class="chip mute">${esc(d.units)}</span>`:""}</div>
+    ${d.typeReason?`<p class="why">${esc(d.typeReason)}</p>`:""}
+    <div class="revbar"><span class="lbl"><b style="color:var(--ink)">${k.appr} of ${k.total}</b> values reviewed</span><div class="prog"><i style="width:${pct}%"></i></div>
+      <span class="chip ok">${k.ok} verified</span>${k.unc?`<span class="chip warn">${k.unc} uncertain</span>`:""}${k.miss?`<span class="chip bad">${k.miss} missing</span>`:""}</div>
+  </div>
+  <div class="toolbar">
+    <div class="seg" role="group" aria-label="Filter">${[["all","All"],["attn","Needs attention"],["todo","To review"],["appr","Approved"]].map(([v,l])=>`<button data-f="${v}" aria-pressed="${F===v}">${l}</button>`).join("")}</div>
+    <span class="grow"></span>
+    <button class="btn" id="apprAll">${ic("check")}Approve all verified</button>
+    <button class="btn primary" id="toExport">${ic("sheet")}Export</button>
+  </div></div>`;
+
+  const fundRows=FUND_FIELDS.filter(([key])=>showF(d.fund[key]));
+  h+=`<div class="panel"><div class="ph"><h2>Fund and LP information</h2><span class="pend">${d.type==="portfolio_summary"?"LP-level fields don’t apply to a portfolio summary":"Values exactly as printed"}</span></div>`;
+  if(!fundRows.length) h+=`<div class="foot">Nothing matches this filter.</div>`;
+  else{
+    h+=`<div class="tw"><table class="t"><thead><tr><th>Field</th><th>Value</th><th>Source and check</th><th class="n">Review</th></tr></thead><tbody>`;
+    fundRows.forEach(([key,label])=>{
+      const f=d.fund[key], id=`fund:${key}`, ed=S.editing===`${d.id}:${id}`, fl=flagOf(f), cur=S.viewer.key===`${d.id}:${id}`;
+      h+=`<tr tabindex="0" data-row="${id}" class="${fl==="missing"&&f.review!=="approved"?"flag-bad":fl==="uncertain"&&f.review!=="approved"?"flag-warn":""} ${cur?"cur":""}">
+        <td class="fl">${esc(label)}</td>
+        <td>${ed?`<input class="ed" id="edIn" value="${esc(f.value??"")}" aria-label="${esc(label)}">`:`<div class="v ${f.value==null?"none":""}">${f.value==null?(f.na?"n/a":"Not found"):esc(f.value)}</div>`}
+          ${!ed&&f.note?`<div class="why2">${esc(f.note)}</div>`:""}${!ed&&f.edited?`<div class="why2">Originally ${esc(f.original??"not found")}</div>`:""}</td>
+        <td><div class="sc">${f.page?`<button class="srcb" data-src="${id}">${ic("eye",'style="width:13px;height:13px"')}Page ${f.page}</button>`:""}${statusChip(f)}</div></td>
+        <td><div class="acts">${f.na?'<span class="pend">—</span>':ed?`<button class="btn sm primary" data-a="save" data-k="${id}">Save</button><button class="btn sm" data-a="cancel">Cancel</button>`:
+          f.review==="approved"?`<span class="done">${ic("check")}${f.value==null?"Confirmed missing":f.edited?"Edited":"Approved"}</span><button class="btn sm ghost icon" data-a="undo" data-k="${id}" title="Undo approval" aria-label="Undo approval">${ic("undo")}</button>`:
+          `<button class="btn sm ghost icon" data-a="edit" data-k="${id}" title="Edit (E)" aria-label="Edit">${ic("edit")}</button><button class="btn sm ${fl==="ok"?"primary":""}" data-a="approve" data-k="${id}" title="Approve (A)">${f.value==null?"Confirm missing":"Approve"}</button>`}</div></td></tr>`;
+    });
+    h+=`</tbody></table></div>`;
+  }
+  h+=`<div class="foot">Select a row and press <span class="kbd">A</span> to approve, <span class="kbd">E</span> to edit, <span class="kbd">Enter</span> to view the source.</div></div>`;
+
+  if(d.portfolio.length){
+    const rows=d.portfolio.map((r,i)=>[r,i]).filter(([r])=>showR(r));
+    h+=`<div class="panel"><div class="ph"><h2>Portfolio companies</h2><span class="pend">${d.portfolio.length} companies${d.units?", "+esc(d.units):""}</span></div>`;
+    if(!rows.length) h+=`<div class="foot">Nothing matches this filter.</div>`;
+    else{
+      h+=`<div class="tw"><table class="t cmp"><thead><tr><th>Company</th>${PORT_FIELDS.map(([,l])=>`<th class="n">${l}</th>`).join("")}<th class="n">Review</th></tr></thead><tbody>`;
+      rows.forEach(([r,i])=>{
+        const flagged=rowFlagged(r);
+        h+=`<tr class="${flagged&&r.review!=="approved"?"flag-warn":""}"><td><button class="coname" data-src="pf:${i}:company">${esc(r.company.value||"Unnamed")}</button></td>`;
+        PORT_FIELDS.forEach(([key,l])=>{
+          const f=r[key], id=`pf:${i}:${key}`, ed=S.editing===`${d.id}:${id}`, fl=flagOf(f), cur=S.viewer.key===`${d.id}:${id}`;
+          h+=`<td class="n">${ed?`<input class="ed" id="edIn" value="${esc(f.value??"")}" style="min-width:90px;text-align:right" aria-label="${esc(l)}"><div class="acts" style="margin-top:4px"><button class="btn sm primary" data-a="save" data-k="${id}">Save</button><button class="btn sm" data-a="cancel">${ic("x")}</button></div>`:
+            `<button class="cellb ${fl==="missing"?"b":fl==="uncertain"?"w":""} ${f.edited?"e":""} ${cur?"cur":""}" data-src="${id}" data-dbl="${id}" title="${esc((f.note?f.note+" ":"")+(f.page?"Page "+f.page+". ":"")+"Double-click to edit.")}">${f.value==null?nullLabel(f):esc(f.value)}</button>`}</td>`;
+        });
+        h+=`<td><div class="acts">${r.review==="approved"?`<span class="done" title="Approved">${ic("check")}</span><button class="btn sm ghost icon" data-a="undoRow" data-k="${i}" aria-label="Undo approval" title="Undo approval">${ic("undo")}</button>`:`<button class="btn sm ${flagged?"":"primary"}" data-a="approveRow" data-k="${i}" title="Approve this row as shown">Approve</button>`}</div></td></tr>`;
+      });
+      h+=`</tbody></table></div>`;
+    }
+    h+=`<div class="foot">Amber and red cells need a look; select one to see the document’s wording. Double-click a value to correct it.</div></div>`;
+  } else if(d.type==="capital_account_statement"){
+    h+=`<div class="panel"><div class="foot" style="border:0">No portfolio table in this document. Portfolio fields come from portfolio summaries and quarterly reports.</div></div>`;
+  }
+  const cc=crossChecks(); if(cc) h+=`<div class="panel"><div class="ph"><h2>Cross-document checks</h2></div><div style="padding:6px 16px 14px">${cc}</div></div>`;
+  c.innerHTML=h; wireCenter(d);
+  if(!S.viewer.docId) renderViewerEmpty();
+}
+function crossChecks(){
+  const ready=S.docs.filter(d=>d.status==="ready"&&d.fund.fund_name&&d.fund.fund_name.value); if(ready.length<2)return "";
+  const key=s=>norm(s).replace(/[,.]/g,"").replace(/\b(lp|l p|scsp|sarl|ltd)\b/g,"").replace(/\s+/g," ").trim();
+  const g={}; ready.forEach(d=>{const k=key(d.fund.fund_name.value);(g[k]=g[k]||[]).push(d)});
+  return `<ul style="list-style:none;padding:0;margin:0">`+Object.values(g).map(x=>{
+    if(x.length<2)return `<li style="padding:8px 0;border-top:1px solid var(--line-2);font-size:14px"><b>${esc(x[0].fund.fund_name.value)}</b><span class="pend"> — one document, nothing to compare</span></li>`;
+    const dates=[...new Set(x.map(d=>norm(d.fund.reporting_date.value||"")).filter(Boolean))], curs=[...new Set(x.map(d=>d.currency).filter(Boolean))];
+    return `<li style="padding:8px 0;border-top:1px solid var(--line-2);font-size:14px;display:flex;gap:8px;flex-wrap:wrap;align-items:center"><b>${esc(x[0].fund.fund_name.value)}</b><span class="pend">${x.length} documents</span>
+      ${dates.length<=1?'<span class="chip ok">Reporting date matches</span>':`<span class="chip warn">Dates differ: ${esc(dates.join(" vs "))}</span>`}
+      ${curs.length<=1?'<span class="chip ok">Currency matches</span>':`<span class="chip warn">Currency differs: ${esc(curs.join(" vs "))}</span>`}</li>`;
+  }).join("")+"</ul>";
+}
+const getF=(d,key)=>{const [a,b,c]=key.split(":");return a==="fund"?d.fund[b]:d.portfolio[+b][c]};
+function fLabel(d,key){const [a,b,c]=key.split(":");if(a==="fund")return FUND_FIELDS.find(x=>x[0]===b)[1];const co=d.portfolio[+b].company.value||"Company";return c==="company"?co:`${co}, ${PORT_FIELDS.find(x=>x[0]===c)[1]}`}
+function act(d,a,k){
+  if(a==="edit"){S.editing=`${d.id}:${k}`;renderCenter();focusEd();return}
+  if(a==="cancel"){S.editing=null;renderCenter();return}
+  if(a==="save"){saveEdit(d,k);return}
+  if(a==="approve"){const f=getF(d,k);f.review="approved";log(d,f.value==null?"Confirmed missing":"Approved",fLabel(d,k)+(f.value!=null?" = "+f.value:""))}
+  if(a==="undo"){const f=getF(d,k);f.review="pending";log(d,"Approval undone",fLabel(d,k))}
+  if(a==="approveRow"){const r=d.portfolio[+k];r.review="approved";log(d,"Approved row",r.company.value||"")}
+  if(a==="undoRow"){const r=d.portfolio[+k];r.review="pending";log(d,"Approval undone",r.company.value||"")}
+  renderDocs(); renderCenter();
+}
+function wireCenter(d){
+  const c=$("#center");
+  const on=(s,fn)=>{const el=c.querySelector(s);if(el)el.onclick=fn};
+  on("#rm",()=>removeDoc(d));
+  on("#rerun",()=>{d.status="queued";d.step=0;S.editing=null;log(d,"Re-run extraction");renderApp();queue()});
+  on("#toExport",openExport);
+  on("#apprAll",()=>{let n=0;
+    FUND_FIELDS.forEach(([k])=>{const f=d.fund[k];if(flagOf(f)==="ok"&&f.review==="pending"){f.review="approved";n++}});
+    d.portfolio.forEach(r=>{if(r.review==="pending"&&!rowFlagged(r)&&flagOf(r.company)!=="missing"){r.review="approved";n++}});
+    log(d,"Bulk approve",`${n} verified items approved`);toast(n?`${n} verified items approved. Flagged items still need a decision.`:"No unflagged items left to approve");renderDocs();renderCenter()});
+  c.querySelectorAll("[data-f]").forEach(b=>b.onclick=()=>{S.filter=b.dataset.f;renderCenter()});
+  c.querySelectorAll("[data-src]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();openSource(d,b.dataset.src)}));
+  c.querySelectorAll("[data-dbl]").forEach(b=>b.addEventListener("dblclick",()=>act(d,"edit",b.dataset.dbl)));
+  c.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",e=>{e.stopPropagation();act(d,b.dataset.a,b.dataset.k)}));
+  c.querySelectorAll("tr[data-row]").forEach(tr=>{
+    tr.addEventListener("click",e=>{if(e.target.closest("button,input"))return;const f=getF(d,tr.dataset.row);if(f.page)openSource(d,tr.dataset.row)});
+    tr.addEventListener("keydown",e=>{
+      if(e.target!==tr)return; const k=tr.dataset.row, f=getF(d,k); const key=e.key.toLowerCase();
+      if(key==="enter"){e.preventDefault();if(f.page)openSource(d,k)}
+      else if(key==="a"&&!f.na&&f.review!=="approved"){e.preventDefault();S.focusRow=k;act(d,"approve",k)}
+      else if(key==="e"&&!f.na){e.preventDefault();act(d,"edit",k)}
+      else if(key==="arrowdown"||key==="j"){e.preventDefault();const n=tr.nextElementSibling;if(n)n.focus()}
+      else if(key==="arrowup"||key==="k"){e.preventDefault();const p=tr.previousElementSibling;if(p)p.focus()}
+    });
+  });
+  if(S.focusRow){const tr=c.querySelector(`tr[data-row="${S.focusRow}"]`);S.focusRow=null;if(tr){const n=tr.nextElementSibling||tr;n.focus()}}
+}
+function focusEd(){const i=$("#edIn");if(!i)return;i.focus();i.select();i.onkeydown=e=>{if(e.key==="Enter"){e.preventDefault();const b=$('[data-a="save"]');if(b)b.click()}if(e.key==="Escape"){S.editing=null;renderCenter()}}}
+function saveEdit(d,key){
+  const f=getF(d,key); const v=($("#edIn").value||"").trim(); const nv=v===""?null:v;
+  if(nv!==f.value){
+    log(d,"Edited",`${fLabel(d,key)}: ${f.value??"(empty)"} → ${nv??"(empty)"}`);
+    f.value=nv; f.edited=nv!==f.original;
+    if(nv!=null){const p=d.pages.find(x=>norm(x.text).includes(norm(nv)));f.verified=!!p;if(p&&!f.page)f.page=p.n;if(f.edited)f.confidence="high";if(!p)f.note=(f.note?f.note+" ":"")+"Entered manually; this value doesn’t appear in the document."}
+  }
+  if(key.startsWith("fund")) f.review="approved";
+  S.editing=null; renderDocs(); renderCenter();
+}
+function removeDoc(d){
+  S.docs=S.docs.filter(x=>x!==d); log(d,"Removed");
+  if(S.selId===d.id)S.selId=S.docs[0]?S.docs[0].id:null;
+  if(S.viewer.docId===d.id){S.viewer={docId:null,page:1,key:null,zoom:1}}
+  renderApp();
+}
+
+/* ================= source viewer ================= */
+function renderViewerEmpty(){
+  if(S.viewer.docId)return;
+  $("#vctx").innerHTML=""; $("#vnav").hidden=true;
+  $("#vbody").innerHTML=`<div class="vempty">${ic("eye")}<div>Select any value to see the page it came from, with the figure highlighted.</div></div>`;
+}
+async function openSource(d,key){
+  const f=getF(d,key);
+  S.viewer={docId:d.id,page:f.page||1,key:`${d.id}:${key}`,field:f,label:fLabel(d,key),zoom:S.viewer.zoom||1};
+  $("#viewer").classList.add("open");
+  renderCenter();
+  $("#vctx").innerHTML=`<div class="vctx"><div class="lab">${esc(S.viewer.label)}${f.page?` · page ${f.page}`:""}</div>
+    <div class="val" style="${f.value==null?"color:var(--bad)":""}">${f.value==null?nullLabel(f):esc(f.value)}</div>
+    ${f.quote?`<div class="q">“${esc(f.quote)}”</div>`:""}${f.note?`<div class="nt">${esc(f.note)}</div>`:""}</div>`;
+  await drawPage(true);
+}
+async function drawPage(scrollTo){
+  const d=S.docs.find(x=>x.id===S.viewer.docId); if(!d||!d.pdf)return;
+  const n=Math.min(Math.max(1,S.viewer.page),d.pdf.numPages); S.viewer.page=n;
+  $("#vnav").hidden=false; $("#pLbl").textContent=`Page ${n} of ${d.pdf.numPages}`;
+  $("#pPrev").disabled=n<=1; $("#pNext").disabled=n>=d.pdf.numPages;
+  const body=$("#vbody"); const width=Math.max(260,body.clientWidth-32)*S.viewer.zoom;
+  const page=await d.pdf.getPage(n); const base=page.getViewport({scale:1}); const scale=width/base.width; const vp=page.getViewport({scale});
+  const dpr=Math.min(window.devicePixelRatio||1,2.5);
+  const box=document.createElement("div"); box.className="pagebox"; box.style.width=vp.width+"px";
+  const cv=document.createElement("canvas"); cv.width=Math.floor(vp.width*dpr); cv.height=Math.floor(vp.height*dpr);
+  box.appendChild(cv); body.innerHTML=""; body.appendChild(box);
+  await page.render({canvasContext:cv.getContext("2d"),viewport:vp,transform:dpr!==1?[dpr,0,0,dpr,0,0]:null}).promise;
+  const f=S.viewer.field;
+  if(f&&f.page===n){
+    locate(d.pages[n-1],f).forEach(h=>{
+      const tx=pdfjsLib.Util.transform(vp.transform,h.it.t); const fh=Math.hypot(tx[2],tx[3]); const fw=h.it.w*scale;
+      const el=document.createElement("div"); el.className="hlbox";
+      Object.assign(el.style,{left:(tx[4]+fw*h.start-3)+"px",top:(tx[5]-fh-2)+"px",width:(Math.max(fw*h.len,8)+6)+"px",height:(fh*1.25+4)+"px"});
+      box.appendChild(el);
+    });
+    const first=box.querySelector(".hlbox"); if(first&&scrollTo){body.scrollTo({top:Math.max(0,first.offsetTop-body.clientHeight/2+20),left:Math.max(0,first.offsetLeft-body.clientWidth/2),behavior:"smooth"})}
+  }
+}
+function locate(pg,f){
+  const target=norm(f.value!=null?f.value:"");
+  const qw=norm(f.quote||"").split(" ").filter(w=>w.length>2);
+  const score=it=>{const lt=norm(pg.lines[it.line]||"");return qw.reduce((a,w)=>a+(lt.includes(w)?1:0),0)};
+  if(target){
+    const c=pg.items.map(it=>{const s=norm(it.str);const i=s.indexOf(target);return i>=0?{it,start:i/Math.max(1,s.length),len:target.length/Math.max(1,s.length),sc:score(it)}:null}).filter(Boolean);
+    if(c.length){c.sort((a,b)=>b.sc-a.sc);return [c[0]]}
+  }
+  if(qw.length){let best=0,bl=null;pg.rows.forEach((r,li)=>{const s=score(r.items[0]);if(s>best){best=s;bl=li}});if(bl!=null)return pg.rows[bl].items.map(it=>({it,start:0,len:1}))}
+  return [];
+}
+$("#pPrev").onclick=()=>{S.viewer.page--;drawPage(false)};
+$("#pNext").onclick=()=>{S.viewer.page++;drawPage(false)};
+$("#zIn").onclick=()=>{S.viewer.zoom=Math.min(2.5,(S.viewer.zoom||1)+.25);drawPage(true)};
+$("#zOut").onclick=()=>{S.viewer.zoom=Math.max(.75,(S.viewer.zoom||1)-.25);drawPage(true)};
+$("#vclose").onclick=()=>$("#viewer").classList.remove("open");
+let rT; window.addEventListener("resize",()=>{clearTimeout(rT);rT=setTimeout(()=>{if(S.viewer.docId&&S.route==="app")drawPage(false)},200)});
+
+/* ================= export ================= */
+function buildExport(incl){
+  const ready=S.docs.filter(d=>d.status==="ready"); const fund=[],pf=[],exc=[];
+  const ft=f=>({ok:"Verified on page",missing:"Missing",uncertain:f.verified===false?"Not found on cited page":"Uncertain",na:"Not applicable"})[flagOf(f)];
+  ready.forEach(d=>{
+    const meth=d.method==="ai"?d.aiName:"Rule-based";
+    FUND_FIELDS.forEach(([k,label])=>{
+      const f=d.fund[k]; if(f.na)return; const ap=f.review==="approved";
+      const st=ap?(f.value==null?"Confirmed missing":f.edited?"Edited and approved":"Approved"):"Pending";
+      if(ap||incl) fund.push({"Document":d.name,"Document type":TYPE_LABEL[d.type],"Field":label,"Value":f.value??"","Currency / units":d.units||d.currency||"","Source page":f.page??"","Source text":f.quote||"","Check":ft(f),"Review status":st,"Note":f.note||"","Original extracted value":f.edited?(f.original??""):"","Extraction method":meth});
+      const fl=flagOf(f); if(fl!=="ok"||!ap) exc.push({"Document":d.name,"Item":label,"Issue":!ap&&fl==="ok"?"Not yet reviewed":ft(f),"Value":f.value??"","Detail":f.note||"","Review status":st});
+    });
+    d.portfolio.forEach(r=>{
+      const ap=r.review==="approved";
+      if(ap||incl){const row={"Document":d.name,"Company":r.company.value||"","Currency / units":d.units||d.currency||""};PORT_FIELDS.forEach(([k,l])=>row[l]=r[k].value??"");row["Source pages"]=[...new Set(PORT_FIELDS.map(([k])=>r[k].page).filter(Boolean))].join(", ");row["Flags"]=PORT_FIELDS.filter(([k])=>flagOf(r[k])!=="ok").map(([k,l])=>`${l}: ${ft(r[k])}`).join("; ");row["Review status"]=ap?"Approved":"Pending";row["Extraction method"]=meth;pf.push(row)}
+      PORT_FIELDS.forEach(([k,l])=>{const f=r[k];if(flagOf(f)!=="ok")exc.push({"Document":d.name,"Item":`${r.company.value}, ${l}`,"Issue":ft(f),"Value":f.value??"","Detail":f.note||"","Review status":ap?"Approved":"Pending"})});
+      if(!ap&&!rowFlagged(r))exc.push({"Document":d.name,"Item":r.company.value,"Issue":"Not yet reviewed","Value":"","Detail":"","Review status":"Pending"});
+    });
+  });
+  return {fund,pf,exc,docs:ready.length};
+}
+function openExport(){
+  const incl=!!S.inclPending; const x=buildExport(incl);
+  const body=$("#dExportBody");
+  if(!x.docs){toast("Process a document before exporting");return}
+  body.innerHTML=`<h2>Export to Excel</h2><p class="sub">${x.docs} document${x.docs>1?"s":""}. Approved values are exported; anything flagged or unreviewed is listed on the Exceptions sheet.</p>
+    <div class="sheets"><div><b>Fund and LP</b><span>${x.fund.length} rows</span></div><div><b>Portfolio</b><span>${x.pf.length} rows</span></div><div><b>Exceptions</b><span>${x.exc.length} rows</span></div><div><b>Audit log</b><span>${S.audit.length+1} entries</span></div></div>
+    <label class="check"><input type="checkbox" id="xIncl" ${incl?"checked":""}> Include values not yet approved, marked Pending</label>
+    <div class="acts"><button class="btn" id="xCancel">Cancel</button><button class="btn primary" id="xGo">${ic("dl")}Download workbook</button></div>`;
+  $("#xIncl").onchange=e=>{S.inclPending=e.target.checked;openExport()};
+  $("#xCancel").onclick=()=>$("#dExport").close();
+  $("#xGo").onclick=async()=>{await doExport();$("#dExport").close()};
+  if(!$("#dExport").open)$("#dExport").showModal();
+}
+async function doExport(){
+  const x=buildExport(!!S.inclPending);
+  log(null,"Exported",`${x.fund.length} fund rows, ${x.pf.length} portfolio rows, ${x.exc.length} exceptions`);
+  const wb=XLSX.utils.book_new();
+  const add=(rows,name,hd)=>{const ws=XLSX.utils.json_to_sheet(rows.length?rows:[Object.fromEntries(hd.map(h=>[h,""]))],{header:hd});ws["!cols"]=hd.map(h=>({wch:Math.min(50,Math.max(h.length+2,...rows.map(r=>String(r[h]??"").length+1)))}));XLSX.utils.book_append_sheet(wb,ws,name)};
+  add(x.fund,"Fund and LP",["Document","Document type","Field","Value","Currency / units","Source page","Source text","Check","Review status","Note","Original extracted value","Extraction method"]);
+  add(x.pf,"Portfolio",["Document","Company","Currency / units",...PORT_FIELDS.map(p=>p[1]),"Source pages","Flags","Review status","Extraction method"]);
+  add(x.exc,"Exceptions",["Document","Item","Issue","Value","Detail","Review status"]);
+  add(S.audit.map(a=>({"Time (UTC)":a.time,"User":a.user,"Document":a.document,"Action":a.action,"Detail":a.detail})),"Audit log",["Time (UTC)","User","Document","Action","Detail"]);
+  const buf=XLSX.write(wb,{bookType:"xlsx",type:"array"});
+  const stamp=new Date().toISOString().slice(0,16).replace(/[:T]/g,"-");
+  const fname=`sourcemark-export-${stamp}.xlsx`;
+  const rec={time:nowIso(),fname,buf,fund:x.fund.length,pf:x.pf.length,exc:x.exc.length,docs:x.docs};
+  if(await saveFile(fname,buf)){S.exports.unshift(rec);toast(`Downloaded ${fname}`)}
+  renderApp();
+}
+async function saveFile(fname,buf){
+  try{
+    if(S.downloads){await S.downloads.save({filename:fname,data:buf});return true}
+    const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([buf],{type:"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"}));a.download=fname;document.body.appendChild(a);a.click();a.remove();return true;
+  }catch(e){toast(e&&e.code==="declined"?"Download cancelled":`Download failed (${e&&e.code||"error"})`);return false}
+}
+$("#newExport").onclick=openExport;
+function renderExports(){
+  const el=$("#exportsList");
+  if(!S.exports.length){el.innerHTML=`<div class="emptyp">${ic("sheet",'style="width:30px;height:30px;stroke-width:1.4"')}<p style="margin-top:8px">No exports yet. Review a document, then export approved values from the Review tab.</p><button class="btn" style="margin-top:14px" data-go2="app">Go to Review</button></div>`;el.querySelector("[data-go2]").onclick=()=>go("app");return}
+  el.innerHTML=`<div class="tw"><table class="t"><thead><tr><th>File</th><th>Created (UTC)</th><th class="n">Documents</th><th class="n">Fund rows</th><th class="n">Portfolio rows</th><th class="n">Exceptions</th><th></th></tr></thead><tbody>${S.exports.map((x,i)=>`<tr><td class="fl">${esc(x.fname)}</td><td>${esc(x.time)}</td><td class="n">${x.docs}</td><td class="n">${x.fund}</td><td class="n">${x.pf}</td><td class="n">${x.exc}</td><td class="n"><button class="btn sm" data-dl="${i}">${ic("dl")}Download</button></td></tr>`).join("")}</tbody></table></div>`;
+  el.querySelectorAll("[data-dl]").forEach(b=>b.onclick=()=>{const x=S.exports[+b.dataset.dl];saveFile(x.fname,x.buf)});
+}
+function renderActivity(){
+  const el=$("#activityList");
+  if(!S.audit.length){el.innerHTML=`<div class="emptyp">Nothing yet. Activity appears as you upload and review documents.</div>`;return}
+  el.innerHTML=`<div class="tw"><table class="t"><thead><tr><th>Time (UTC)</th><th>User</th><th>Document</th><th>Action</th><th>Detail</th></tr></thead><tbody>${[...S.audit].reverse().map(a=>`<tr><td style="white-space:nowrap">${esc(a.time)}</td><td>${esc(a.user)}</td><td>${esc(a.document)}</td><td class="fl">${esc(a.action)}</td><td>${esc(a.detail)}</td></tr>`).join("")}</tbody></table></div>`;
+}
+
+route();
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+{
+  "name": "sourcemark-poc",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Sourcemark: AI-assisted fund document extraction proof of concept (Clustox)",
+  "engines": { "node": ">=18" }
+}
